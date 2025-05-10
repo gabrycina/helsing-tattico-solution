@@ -151,6 +151,7 @@ version = "3.6.0"
 description = "Generate mypy stub files from protobuf specs"
 optional = false
 python-versions = ">=3.8"
+groups = ["dev"]
 files = [
     {file = "mypy-protobuf-3.6.0.tar.gz", hash = "sha256:02f242eb3409f66889f2b1a3aa58356ec4d909cdd0f93115622e9e70366eca3c"},
     {file = "mypy_protobuf-3.6.0-py3-none-any.whl", hash = "sha256:56176e4d569070e7350ea620262478b49b7efceba4103d468448f1d21492fd6c"},
@@ -166,6 +167,7 @@ version = "6.30.2"
 description = ""
 optional = false
 python-versions = ">=3.9"
+groups = ["main", "dev"]
 files = [
     {file = "protobuf-6.30.2-cp310-abi3-win32.whl", hash = "sha256:b12ef7df7b9329886e66404bef5e9ce6a26b54069d7f7436a0853ccdeb91c103"},
     {file = "protobuf-6.30.2-cp310-abi3-win_amd64.whl", hash = "sha256:7653c99774f73fe6b9301b87da52af0e69783a2e371e8b599b3e9cb4da4b12b9"},
@@ -204,6 +206,7 @@ version = "6.30.2.20250506"
 description = "Typing stubs for protobuf"
 optional = false
 python-versions = ">=3.9"
+groups = ["dev"]
 files = [
     {file = "types_protobuf-6.30.2.20250506-py3-none-any.whl", hash = "sha256:e5452f088a8d227e7126c859a908c5354611cda9ac90a6cc603d99d4a08f8444"},
     {file = "types_protobuf-6.30.2.20250506.tar.gz", hash = "sha256:dc9ee544794f00545ea3a3028295a4b111181e510bed17ab88239274655cf512"},
