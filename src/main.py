@@ -5,6 +5,7 @@ from google.protobuf.empty_pb2 import Empty
 from google.protobuf.wrappers_pb2 import StringValue
 import os
 from dotenv import load_dotenv
+import time
 
 load_dotenv()
 
@@ -34,6 +35,16 @@ def get_simulation_status(simulation_id: str) -> None:
         )
         print("Simulation status:")
         print(response.status)
+
+def check_detection(detections):
+    result = []
+    for direction in ["north", "northeast", "east", "southeast", "south", "southwest", "west", "northwest"]:
+        if detections.HasField(direction):
+            detection: simulation_pb2.Detection = getattr(detections, direction)
+            detection_class = "OBSTACLE" if getattr(detection, "class") == 0 else "TARGET"
+            detection_distance = detection.distance
+            result.append((direction, detection_class, detection_distance))
+    return result
 
 
 def unit_control(
@@ -69,18 +80,12 @@ def unit_control(
 
         # Process responses from the server
         for response in responses:
-            print("Unit status:")
-            print(f"Position: ({response.pos.x}, {response.pos.y})")
-            if response.detections:
-                print("Detections:", repr(response.detections))
-            if response.messages:
-                print("Messages:", response.messages)
-
+            print(response.pos.x, response.pos.y)
+            print(check_detection(response.detections))
+            time.sleep(3)
 
 if __name__ == "__main__":
     simulation_parameters = start_simulation()
-    print("BASE:", simulation_parameters.base_pos)
-    for sensor_id, sensor_coordinates in simulation_parameters.sensor_units.items():
-        print("SENSOR:", sensor_id, sensor_coordinates)
+    print(repr(simulation_parameters))
     get_simulation_status(simulation_parameters.id)
-    unit_control(simulation_parameters.id, 1, (0, 0))
+    unit_control(simulation_parameters.id, 1, (1000, 0))
