@@ -7,6 +7,25 @@ import simulation_pb2_grpc
 from google.protobuf.empty_pb2 import Empty
 from google.protobuf.wrappers_pb2 import StringValue
 import threading
+from queue import Queue
+import queue
+from google.protobuf import any_pb2
+import logging
+import sys
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+
+# Create named loggers
+logger = logging.getLogger("simulation")
+sensor_logger = logging.getLogger("sensor")
+strike_logger = logging.getLogger("strike")
 
 load_dotenv()
 
@@ -14,17 +33,25 @@ load_dotenv()
 SERVER_ADDRESS = "172.237.124.96:21234"
 TOKEN = ''.join(os.urandom(40).hex())  # Generate 40 random bytes and convert to hex string
 
+# Create thread-safe queues
+response_queue = Queue()
+
 def start_simulation():
     """Start a new simulation and return the simulation parameters"""
+    logger.info("Starting new simulation")
     with grpc.insecure_channel(SERVER_ADDRESS) as channel:
         stub = simulation_pb2_grpc.SimulationStub(channel)
         
         response = stub.Start(Empty(), metadata=[("authorization", f"bearer {TOKEN}")])
-        print("Simulation started with parameters:")
+        logger.info(f"Simulation started with ID: {response.id}")
         return response
 
+# TODO: add velocity
 def control_sensor_unit(simulation_id, unit_id):
     """Control a specific sensor unit"""
+    unit_logger = logging.getLogger(f"sensor-{unit_id}")
+    unit_logger.info(f"Initializing sensor unit {unit_id} for simulation {simulation_id}")
+    
     channel = grpc.insecure_channel(SERVER_ADDRESS)
     stub = simulation_pb2_grpc.SimulationStub(channel)
     
@@ -35,73 +62,152 @@ def control_sensor_unit(simulation_id, unit_id):
         ("x-unit-id", unit_id),
     ]
     
+    # Shared state between response handler and command generator
+    response_queue = Queue()
+    unit_state = {
+        "target_detected": False,
+        "target_direction": None,
+        "counter": 0  # Simple counter to alternate behaviors
+    }
+    
     # Create a generator for sending commands
     def generate_commands():
-        # Wait for a moment to connect
-        time.sleep(1)
-        
-        # Send movement command - move in positive X direction
-        thrust_command = simulation_pb2.UnitCommand.ThrustCommand(
-            impulse=simulation_pb2.Vector2(x=1.0, y=0.0)
+        # Initial command to start things off
+        unit_logger.info(f"Sending initial command for unit {unit_id}")
+        yield simulation_pb2.UnitCommand(
+            thrust=simulation_pb2.UnitCommand.ThrustCommand(
+                impulse=simulation_pb2.Vector2(x=0.0, y=0.0)
+            )
         )
-        command = simulation_pb2.UnitCommand(thrust=thrust_command)
-        print(f"Sending movement command to unit {unit_id}: {command}")
-        yield command
         
-        # Keep the stream open
         while True:
-            time.sleep(5)
-            # Send null command to keep connection alive
-            command = simulation_pb2.UnitCommand()
-            yield command
+            # Wait for a response (blocking)
+            try:
+                unit_logger.debug(f"Unit {unit_id} waiting for response")
+                response = response_queue.get()
+                unit_logger.debug(f"Unit {unit_id} received response")
+                
+                # Simple condition 1: Check for target detection
+                unit_state["target_detected"] = False
+                if response.HasField("detections"):
+                    for direction in ["north", "northeast", "east", "southeast", 
+                                     "south", "southwest", "west", "northwest"]:
+                        if response.detections.HasField(direction):
+                            detection = getattr(response.detections, direction)
+                            cls_value = getattr(detection, "class")
+                            if cls_value == 1:  # TARGET
+                                unit_state["target_detected"] = True
+                                unit_state["target_direction"] = direction
+                                unit_logger.info(f"Unit {unit_id} detected TARGET in direction {direction} at distance {detection.distance}")
+                
+                # Increment counter
+                unit_state["counter"] += 1
+                
+                # Simple condition 2: Send message every 5 responses if target detected
+                if unit_state["target_detected"] and unit_state["counter"] % 5 == 0:
+                    # Create a simple message
+                    message = f"TARGET_DETECTED|{unit_state['target_direction']}|10.0"
+                    string_value = StringValue(value=message)
+                    
+                    any_message = any_pb2.Any()
+                    any_message.Pack(string_value)
+                    
+                    unit_logger.info(f"Unit {unit_id} broadcasting target in {unit_state['target_direction']}")
+                    yield simulation_pb2.UnitCommand(
+                        msg=simulation_pb2.UnitCommand.MsgCommand(msg=any_message)
+                    )
+                    continue
+
+                # Simple condition 3: Move based on target or search pattern
+                if unit_state["target_detected"]:
+                    # When target detected, move toward it
+                    if unit_state["target_direction"] == "north":
+                        vector = simulation_pb2.Vector2(x=0.0, y=1.0)
+                    elif unit_state["target_direction"] == "northeast":
+                        vector = simulation_pb2.Vector2(x=0.7, y=0.7)
+                    elif unit_state["target_direction"] == "east":
+                        vector = simulation_pb2.Vector2(x=1.0, y=0.0)
+                    elif unit_state["target_direction"] == "southeast":
+                        vector = simulation_pb2.Vector2(x=0.7, y=-0.7)
+                    elif unit_state["target_direction"] == "south":
+                        vector = simulation_pb2.Vector2(x=0.0, y=-1.0)
+                    elif unit_state["target_direction"] == "southwest":
+                        vector = simulation_pb2.Vector2(x=-0.7, y=-0.7)
+                    elif unit_state["target_direction"] == "west":
+                        vector = simulation_pb2.Vector2(x=-1.0, y=0.0)
+                    elif unit_state["target_direction"] == "northwest":
+                        vector = simulation_pb2.Vector2(x=-0.7, y=0.7)
+                    else:
+                        vector = simulation_pb2.Vector2(x=1.0, y=0.0)
+                    
+                    unit_logger.info(f"Unit {unit_id} moving toward target in {unit_state['target_direction']}")
+                else:
+                    # No target - cycle through 4 simple directions based on counter
+                    directions = [(1.0, 0.0), (0.0, 1.0), (-1.0, 0.0), (0.0, -1.0)]
+                    idx = (unit_state["counter"] % 4)
+                    vector = simulation_pb2.Vector2(x=directions[idx][0], y=directions[idx][1])
+                    unit_logger.info(f"Unit {unit_id} searching: direction={idx}, vector=({directions[idx][0]}, {directions[idx][1]})")
+                
+                yield simulation_pb2.UnitCommand(
+                    thrust=simulation_pb2.UnitCommand.ThrustCommand(impulse=vector)
+                )
+                
+            except queue.Empty:
+                # This should never happen with blocking get()
+                unit_logger.error(f"Unit {unit_id} queue.Empty exception - should not happen with blocking get()")
+                pass
     
     # Start the bidirectional streaming
+    unit_logger.info(f"Starting bidirectional stream for unit {unit_id}")
     responses = stub.UnitControl(generate_commands(), metadata=metadata)
     
     # Process the responses
     for response in responses:
-        print(f"\nReceived update from unit {unit_id}:")
-        print(f"  Position: X={response.pos.x}, Y={response.pos.y}")
+        unit_logger.debug(f"Unit {unit_id} position: ({response.pos.x}, {response.pos.y})")
         
         if response.HasField("detections"):
-            print("  Detections:")
             detections = response.detections
             
             for direction in ["north", "northeast", "east", "southeast", 
                              "south", "southwest", "west", "northwest"]:
                 if detections.HasField(direction):
-                    detection: simulation_pb2.Detection = getattr(detections, direction)
-                    detection_class = "OBSTACLE" if getattr(detection, "class") == 0 else "TARGET"
-                    print(f"    {direction.upper()}: {detection_class} at distance {detection.distance}")
+                    detection = getattr(detections, direction)
+                    cls_value = getattr(detection, "class")
+                    cls_name = "OBSTACLE" if cls_value == 0 else "TARGET"
+                    unit_logger.debug(f"Unit {unit_id} detected {cls_name} {direction.upper()} at {detection.distance}")
                 
         if response.messages:
-            print("  Messages:")
             for message in response.messages:
-                print(f"    From {message.src}: {message.value}")
+                unit_logger.debug(f"Unit {unit_id} received message from {message.src}")
+        
+        # Add response to the queue for the generator to process
+        response_queue.put(response)
 
 def launch_strike_unit(simulation_id, base_pos):
     """Launch the strike unit"""
+    logger.info(f"Launching strike unit for simulation {simulation_id}")
+    
     with grpc.insecure_channel(SERVER_ADDRESS) as channel:
         stub = simulation_pb2_grpc.SimulationStub(channel)
         
         request = StringValue(value=simulation_id)
         response = stub.LaunchStrikeUnit(request, metadata=[("authorization", f"bearer {TOKEN}")])
-        print("\nStrike unit launched:")
-        print(f"  Unit ID: {response.id}")
-        print(f"  Position: X={response.pos.x}, Y={response.pos.y}")
         
         # Calculate distance from base
         dx = response.pos.x - base_pos.x
         dy = response.pos.y - base_pos.y
         distance_from_base = (dx**2 + dy**2)**0.5
         
-        print(f"  Distance from base: {distance_from_base:.2f} units")
-        print(f"  Offset from base: X={dx:.2f}, Y={dy:.2f}")
+        logger.info(f"Strike unit {response.id} launched at position ({response.pos.x}, {response.pos.y})")
+        logger.info(f"Distance from base: {distance_from_base:.2f} units, Offset: ({dx:.2f}, {dy:.2f})")
         
         return response
 
 def control_strike_unit(simulation_id, unit_id):
     """Control the strike unit"""
+    unit_logger = logging.getLogger(f"strike-{unit_id}")
+    unit_logger.info(f"Initializing strike unit {unit_id} for simulation {simulation_id}")
+    
     channel = grpc.insecure_channel(SERVER_ADDRESS)
     stub = simulation_pb2_grpc.SimulationStub(channel)
     
@@ -112,38 +218,93 @@ def control_strike_unit(simulation_id, unit_id):
         ("x-unit-id", unit_id),
     ]
     
+    # Shared state between response handler and command generator
+    response_queue = Queue()
+    strike_state = {
+        "has_target_info": False,
+        "target_direction": None,
+        "counter": 0
+    }
+    
     # Create a generator for sending commands
     def generate_commands():
-        # Wait for a moment to connect
-        time.sleep(1)
+        # Initial command
+        unit_logger.info("Sending initial strike unit command")
+        yield simulation_pb2.UnitCommand()
         
-        # Send movement command - move in positive X direction
-        thrust_command = simulation_pb2.UnitCommand.ThrustCommand(
-            impulse=simulation_pb2.Vector2(x=1.0, y=1.0)
-        )
-        command = simulation_pb2.UnitCommand(thrust=thrust_command)
-        print(f"Sending movement command to strike unit: {command}")
-        yield command
-        
-        # Keep the stream open
         while True:
-            time.sleep(5)
-            # Send null command to keep connection alive
-            command = simulation_pb2.UnitCommand()
-            yield command
+            # Wait for response (blocking)
+            try:
+                unit_logger.debug("Strike unit waiting for response")
+                response = response_queue.get()
+                unit_logger.debug("Strike unit received response")
+                
+                # Process messages
+                for message in response.messages:
+                    msg_str = str(message.value)
+                    if "TARGET_DETECTED" in msg_str:
+                        parts = msg_str.split('|')
+                        if len(parts) >= 2:
+                            strike_state["has_target_info"] = True
+                            strike_state["target_direction"] = parts[1]
+                            unit_logger.info(f"Strike unit received target info: direction={parts[1]}")
+                
+                # Increment counter
+                strike_state["counter"] += 1
+                
+                # Simple condition: If we have target info, move toward it
+                if strike_state["has_target_info"]:
+                    # Similar direction mapping as above
+                    if strike_state["target_direction"] == "north":
+                        vector = simulation_pb2.Vector2(x=0.0, y=1.0)
+                    elif strike_state["target_direction"] == "northeast":
+                        vector = simulation_pb2.Vector2(x=0.7, y=0.7)
+                    elif strike_state["target_direction"] == "east":
+                        vector = simulation_pb2.Vector2(x=1.0, y=0.0)
+                    elif strike_state["target_direction"] == "southeast":
+                        vector = simulation_pb2.Vector2(x=0.7, y=-0.7)
+                    elif strike_state["target_direction"] == "south":
+                        vector = simulation_pb2.Vector2(x=0.0, y=-1.0)
+                    elif strike_state["target_direction"] == "southwest":
+                        vector = simulation_pb2.Vector2(x=-0.7, y=-0.7)
+                    elif strike_state["target_direction"] == "west":
+                        vector = simulation_pb2.Vector2(x=-1.0, y=0.0)
+                    elif strike_state["target_direction"] == "northwest":
+                        vector = simulation_pb2.Vector2(x=-0.7, y=0.7)
+                    else:
+                        vector = simulation_pb2.Vector2(x=0.0, y=0.0)
+                    
+                    unit_logger.info(f"Strike unit moving toward target in {strike_state['target_direction']}")
+                else:
+                    # No target info - just make a simple circular motion
+                    directions = [(0.5, 0.5), (-0.5, 0.5), (-0.5, -0.5), (0.5, -0.5)]
+                    idx = (strike_state["counter"] % 4)
+                    vector = simulation_pb2.Vector2(x=directions[idx][0], y=directions[idx][1])
+                    unit_logger.info(f"Strike unit searching: direction={idx}, vector=({directions[idx][0]}, {directions[idx][1]})")
+                
+                yield simulation_pb2.UnitCommand(
+                    thrust=simulation_pb2.UnitCommand.ThrustCommand(impulse=vector)
+                )
+                
+            except queue.Empty:
+                # This should never happen with blocking get()
+                unit_logger.error("Strike unit queue.Empty exception - should not happen with blocking get()")
+                pass
     
     # Start the bidirectional streaming
+    unit_logger.info("Starting bidirectional stream for strike unit")
     responses = stub.UnitControl(generate_commands(), metadata=metadata)
     
     # Process the responses
     for response in responses:
-        print(f"\nReceived update from strike unit:")
-        print(f"  Position: X={response.pos.x}, Y={response.pos.y}")
+        unit_logger.debug(f"Strike unit position: ({response.pos.x}, {response.pos.y})")
         
         if response.messages:
-            print("  Messages:")
             for message in response.messages:
-                print(f"    From {message.src}: {message.value}")
+                unit_logger.debug(f"Strike unit received message from {message.src}")
+        
+        # Add response to the queue for the generator to process
+        response_queue.put(response)
 
 def get_simulation_status(simulation_id):
     """Get the status of a simulation"""
@@ -152,8 +313,12 @@ def get_simulation_status(simulation_id):
         
         request = StringValue(value=simulation_id)
         response = stub.GetSimulationStatus(request, metadata=[("authorization", f"bearer {TOKEN}")])
-        print("\nSimulation status:")
-        print(response)
+        
+        if hasattr(response, "status"):
+            status_map = {0: "RUNNING", 1: "SUCCESS", 2: "TIMED_OUT", 3: "CANCELED"}
+            status_str = status_map.get(response.status, str(response.status))
+            logger.info(f"Simulation status: {status_str}")
+        
         return response
 
 if __name__ == "__main__":
@@ -161,27 +326,33 @@ if __name__ == "__main__":
     sim_response = start_simulation()
     simulation_id = sim_response.id
     
-    print(f"\nBase position: X={sim_response.base_pos.x}, Y={sim_response.base_pos.y}")
-    print("Sensor units:")
+    logger.info(f"Base position: ({sim_response.base_pos.x}, {sim_response.base_pos.y})")
+    logger.info(f"Sensor units: {len(sim_response.sensor_units)}")
     for unit_id, pos in sim_response.sensor_units.items():
-        print(f"  Unit {unit_id}: X={pos.x}, Y={pos.y}")
-    # Choose the first sensor unit
-    first_sensor_id = list(sim_response.sensor_units.keys())[0]
+        logger.info(f"  Unit {unit_id}: ({pos.x}, {pos.y})")
     
-    # Start controlling the first sensor unit in a separate thread
-    sensor_thread = threading.Thread(
-        target=control_sensor_unit,
-        args=(simulation_id, first_sensor_id),
-        daemon=True
-    )
-    sensor_thread.start()
     
-    # Wait for some time to let the sensor move
-    print("\nSpawning strike unit...")
+    control_sensor_unit(simulation_id=simulation_id, unit_id="1")
+    # # Start all sensor units in separate threads
+    # sensor_threads = []
+    # for sensor_id in [1]:
+    #     sensor_thread = threading.Thread(
+    #         target=control_sensor_unit,
+    #         args=(simulation_id, sensor_id),
+    #         daemon=True
+    #     )
+    #     sensor_threads.append(sensor_thread)
+    #     sensor_thread.start()
+        # logger.info(f"Started sensor unit {sensor_id}")
     
-    # Launch the strike unit
-    strike_response = launch_strike_unit(simulation_id, sim_response.base_pos)
-    strike_unit_id = strike_response.id
+    # Wait for some time to let the sensors start moving and detecting
+    # logger.info("Sensors activated. Waiting 5 seconds before launching strike unit...")
+    # time.sleep(5)
+    
+    # # Launch the strike unit
+    # logger.info("Launching strike unit...")
+    # strike_response = launch_strike_unit(simulation_id, sim_response.base_pos)
+    # strike_unit_id = strike_response.id
     
     # # Start controlling the strike unit in a separate thread
     # strike_thread = threading.Thread(
@@ -190,15 +361,18 @@ if __name__ == "__main__":
     #     daemon=True
     # )
     # strike_thread.start()
+    # logger.info(f"Strike unit {strike_unit_id} activated")
     
-    # Wait for some time to let the simulation run
-    print("\nSimulation running, press Ctrl+C to exit...")
+    # Wait for the simulation to end
+    logger.info("Simulation running, press Ctrl+C to exit...")
     try:
         while True:
             time.sleep(5)
             status = get_simulation_status(simulation_id)
             if hasattr(status, "status") and status.status != 0:  # Not RUNNING
-                print(f"\nSimulation ended with status: {status.status}")
+                status_map = {1: "SUCCESS", 2: "TIMED_OUT", 3: "CANCELED"}
+                status_str = status_map.get(status.status, str(status.status))
+                logger.info(f"Simulation ended with status: {status_str}")
                 break
     except KeyboardInterrupt:
-        print("\nExiting...") 
+        logger.info("Simulation interrupted by user") 
