@@ -1,2 +1,4 @@
 # SpecStory explanation file
 .specstory/**
+.venv/
+venv/
