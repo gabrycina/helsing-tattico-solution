@@ -46,8 +46,17 @@ def start_simulation():
         logger.info(f"Simulation started with ID: {response.id}")
         return response
 
-# TODO: add velocity
-def control_sensor_unit(simulation_id, unit_id):
+def check_detection(detections):
+    result = []
+    for direction in ["north", "northeast", "east", "southeast", "south", "southwest", "west", "northwest"]:
+        if detections.HasField(direction):
+            detection: simulation_pb2.Detection = getattr(detections, direction)
+            detection_class = "OBSTACLE" if getattr(detection, "class") == 0 else "TARGET"
+            detection_distance = detection.distance
+            result.append((direction, detection_class, detection_distance))
+    return result
+
+def control_sensor_unit(simulation_id, unit_id, initial_pos=(0,0)):
     """Control a specific sensor unit"""
     unit_logger = logging.getLogger(f"sensor-{unit_id}")
     unit_logger.info(f"Initializing sensor unit {unit_id} for simulation {simulation_id}")
@@ -70,9 +79,8 @@ def control_sensor_unit(simulation_id, unit_id):
         "counter": 0  # Simple counter to alternate behaviors
     }
     
-    # Create a generator for sending commands
     def generate_commands():
-        # Initial command to start things off
+        counter = 0
         unit_logger.info(f"Sending initial command for unit {unit_id}")
         yield simulation_pb2.UnitCommand(
             thrust=simulation_pb2.UnitCommand.ThrustCommand(
@@ -80,82 +88,35 @@ def control_sensor_unit(simulation_id, unit_id):
             )
         )
         
+        posx = None
+        posy = None
+        vx, vy = 0, 0
         while True:
-            # Wait for a response (blocking)
-            try:
-                unit_logger.debug(f"Unit {unit_id} waiting for response")
-                response = response_queue.get()
-                unit_logger.debug(f"Unit {unit_id} received response")
-                
-                # Simple condition 1: Check for target detection
-                unit_state["target_detected"] = False
-                if response.HasField("detections"):
-                    for direction in ["north", "northeast", "east", "southeast", 
-                                     "south", "southwest", "west", "northwest"]:
-                        if response.detections.HasField(direction):
-                            detection = getattr(response.detections, direction)
-                            cls_value = getattr(detection, "class")
-                            if cls_value == 1:  # TARGET
-                                unit_state["target_detected"] = True
-                                unit_state["target_direction"] = direction
-                                unit_logger.info(f"Unit {unit_id} detected TARGET in direction {direction} at distance {detection.distance}")
-                
-                # Increment counter
-                unit_state["counter"] += 1
-                
-                # Simple condition 2: Send message every 5 responses if target detected
-                if unit_state["target_detected"] and unit_state["counter"] % 5 == 0:
-                    # Create a simple message
-                    message = f"TARGET_DETECTED|{unit_state['target_direction']}|10.0"
-                    string_value = StringValue(value=message)
-                    
-                    any_message = any_pb2.Any()
-                    any_message.Pack(string_value)
-                    
-                    unit_logger.info(f"Unit {unit_id} broadcasting target in {unit_state['target_direction']}")
-                    yield simulation_pb2.UnitCommand(
-                        msg=simulation_pb2.UnitCommand.MsgCommand(msg=any_message)
-                    )
-                    continue
+            unit_logger.debug(f"Unit {unit_id} waiting for response")
+            response = response_queue.get()
+            unit_logger.debug(f"Unit {unit_id} received response")
 
-                # Simple condition 3: Move based on target or search pattern
-                if unit_state["target_detected"]:
-                    # When target detected, move toward it
-                    if unit_state["target_direction"] == "north":
-                        vector = simulation_pb2.Vector2(x=0.0, y=1.0)
-                    elif unit_state["target_direction"] == "northeast":
-                        vector = simulation_pb2.Vector2(x=0.7, y=0.7)
-                    elif unit_state["target_direction"] == "east":
-                        vector = simulation_pb2.Vector2(x=1.0, y=0.0)
-                    elif unit_state["target_direction"] == "southeast":
-                        vector = simulation_pb2.Vector2(x=0.7, y=-0.7)
-                    elif unit_state["target_direction"] == "south":
-                        vector = simulation_pb2.Vector2(x=0.0, y=-1.0)
-                    elif unit_state["target_direction"] == "southwest":
-                        vector = simulation_pb2.Vector2(x=-0.7, y=-0.7)
-                    elif unit_state["target_direction"] == "west":
-                        vector = simulation_pb2.Vector2(x=-1.0, y=0.0)
-                    elif unit_state["target_direction"] == "northwest":
-                        vector = simulation_pb2.Vector2(x=-0.7, y=0.7)
-                    else:
-                        vector = simulation_pb2.Vector2(x=1.0, y=0.0)
-                    
-                    unit_logger.info(f"Unit {unit_id} moving toward target in {unit_state['target_direction']}")
-                else:
-                    # No target - cycle through 4 simple directions based on counter
-                    directions = [(1.0, 0.0), (0.0, 1.0), (-1.0, 0.0), (0.0, -1.0)]
-                    idx = (unit_state["counter"] % 4)
-                    vector = simulation_pb2.Vector2(x=directions[idx][0], y=directions[idx][1])
-                    unit_logger.info(f"Unit {unit_id} searching: direction={idx}, vector=({directions[idx][0]}, {directions[idx][1]})")
+            results = check_detection(response.detections)
+            messages = response.messages
+
+            if posx == None:
+                posx = response.pos.x
+                posy = response.pos.y
+            else:
+                # print("dx:", round(response.pos.x - posx, 5), "dy:", round(response.pos.y - posy,5))
+                posx = response.pos.x
+                posy = response.pos.y
+
+            print("x:", round(posx,5), "y:", round(posy, 5))
+            print(results)
+
+            vx = (posx)/(-1000)
+            vy = (posy)/(-1000)
+
+            yield simulation_pb2.UnitCommand(
+                thrust=simulation_pb2.UnitCommand.ThrustCommand(impulse=simulation_pb2.Vector2(x=vx, y=vy))
+            )
                 
-                yield simulation_pb2.UnitCommand(
-                    thrust=simulation_pb2.UnitCommand.ThrustCommand(impulse=vector)
-                )
-                
-            except queue.Empty:
-                # This should never happen with blocking get()
-                unit_logger.error(f"Unit {unit_id} queue.Empty exception - should not happen with blocking get()")
-                pass
     
     # Start the bidirectional streaming
     unit_logger.info(f"Starting bidirectional stream for unit {unit_id}")
@@ -332,7 +293,7 @@ if __name__ == "__main__":
         logger.info(f"  Unit {unit_id}: ({pos.x}, {pos.y})")
     
     
-    control_sensor_unit(simulation_id=simulation_id, unit_id="1")
+    control_sensor_unit(simulation_id=simulation_id, unit_id="1", initial_pos=(sim_response.sensor_units["1"].x, sim_response.sensor_units["1"].y))
     # # Start all sensor units in separate threads
     # sensor_threads = []
     # for sensor_id in [1]:
