@@ -38,11 +38,13 @@ def unit_control(simulation_id, unit_id, impulse_vector):
         ]
         
         # Generator function to send commands
-        request = [simulation_pb2.UnitCommand(
+        request = iter([
+            simulation_pb2.UnitCommand(
                     thrust=simulation_pb2.UnitCommand.ThrustCommand(
                         impulse=simulation_pb2.Vector2(x=impulse_vector[0], y=impulse_vector[1])
                     )
-                )]
+                )
+        ])
         
         # Bidirectional streaming RPC
         responses = stub.UnitControl(request, metadata=metadata)
