@@ -1,4 +1,5 @@
 import os
+import random
 from dotenv import load_dotenv
 import grpc
 import time
@@ -12,6 +13,7 @@ import queue
 from google.protobuf import any_pb2
 import logging
 import sys
+from navigation import UnitNavigator
 
 # Configure logging
 logging.basicConfig(
@@ -56,13 +58,15 @@ def check_detection(detections):
             result.append((direction, detection_class, detection_distance))
     return result
 
-def control_sensor_unit(simulation_id, unit_id, initial_pos=(0,0)):
+def control_sensor_unit(simulation_id, unit_id):
     """Control a specific sensor unit"""
     unit_logger = logging.getLogger(f"sensor-{unit_id}")
     unit_logger.info(f"Initializing sensor unit {unit_id} for simulation {simulation_id}")
     
     channel = grpc.insecure_channel(SERVER_ADDRESS)
     stub = simulation_pb2_grpc.SimulationStub(channel)
+    
+    start_positions = [(50, 50), (-50, 50), (-50, -50), (50, -50)] 
     
     # Metadata for this unit
     metadata = [
@@ -73,14 +77,12 @@ def control_sensor_unit(simulation_id, unit_id, initial_pos=(0,0)):
     
     # Shared state between response handler and command generator
     response_queue = Queue()
-    unit_state = {
-        "target_detected": False,
-        "target_direction": None,
-        "counter": 0  # Simple counter to alternate behaviors
-    }
     
+    unit_navigator = UnitNavigator()
+    unit_navigator.set_target(start_positions[int(unit_id) - 1])
+    
+    # Create a generator for sending commands
     def generate_commands():
-        counter = 0
         unit_logger.info(f"Sending initial command for unit {unit_id}")
 
         yield simulation_pb2.UnitCommand(
@@ -89,37 +91,33 @@ def control_sensor_unit(simulation_id, unit_id, initial_pos=(0,0)):
             )
         )
         
-
-        posx = None
-        posy = None
-        vx, vy = 0, 0
-        counter = 200
         while True:
-            unit_logger.debug(f"Unit {unit_id} waiting for response")
             response = response_queue.get()
-            unit_logger.debug(f"Unit {unit_id} received response")
-
-            results = check_detection(response.detections)
-            messages = response.messages
-
-            if posx == None:
-                posx = response.pos.x
-                posy = response.pos.y
-            else:
-                print("dx:", round(response.pos.x - posx, 5), "dy:", round(response.pos.y - posy,5), "counter:", counter)
-                posx = response.pos.x
-                posy = response.pos.y
-
-            # print("x:", round(posx,5), "y:", round(posy, 5))
-            # print(results)
-
-            v = 10 if counter > 0 else -10
-            counter -= 1
+            
+            x = response.pos.x
+            y = response.pos.y
+            unit_navigator.update_position((x, y))
+            
+            # unit_logger.info(f"Current position: ({x}, {y})")
+            
+            navigation_impulse = unit_navigator.get_navigation_impulse()
+            
+            # Log navigation details
+            # # unit_logger.info(f"  Current velocity: {unit_navigator.estimated_velocity}")
+            # # unit_logger.info(f"  Distance to target: {((x**2 + y**2)**0.5):.2f}")
+            # # unit_logger.info(f"  At target: {unit_navigator.is_at_target()}")
+            # unit_logger.info(f"  Nav impulse: {navigation_impulse}")
+            detections = check_detection(response.detections)
+            has_target = any("TARGET" == detection[1] for detection in detections)
+             
+            if has_target:
+                unit_logger.info(f"{x=} {y=}: {check_detection(response.detections)}")
             
             yield simulation_pb2.UnitCommand(
-                thrust=simulation_pb2.UnitCommand.ThrustCommand(impulse=simulation_pb2.Vector2(x=v, y=0.0))
-            )
-                
+                    thrust=simulation_pb2.UnitCommand.ThrustCommand(
+                        impulse=navigation_impulse 
+                    )
+                )        
     
     # Start the bidirectional streaming
     unit_logger.info(f"Starting bidirectional stream for unit {unit_id}")
@@ -295,19 +293,20 @@ if __name__ == "__main__":
     for unit_id, pos in sim_response.sensor_units.items():
         logger.info(f"  Unit {unit_id}: ({pos.x}, {pos.y})")
     
+    # Single unit version 
+    # control_sensor_unit(simulation_id=simulation_id, unit_id="1", initial_pos=(sim_response.sensor_units["1"].x, sim_response.sensor_units["1"].y))
     
-    control_sensor_unit(simulation_id=simulation_id, unit_id="1", initial_pos=(sim_response.sensor_units["1"].x, sim_response.sensor_units["1"].y))
-    # # Start all sensor units in separate threads
-    # sensor_threads = []
-    # for sensor_id in [1]:
-    #     sensor_thread = threading.Thread(
-    #         target=control_sensor_unit,
-    #         args=(simulation_id, sensor_id),
-    #         daemon=True
-    #     )
-    #     sensor_threads.append(sensor_thread)
-    #     sensor_thread.start()
-        # logger.info(f"Started sensor unit {sensor_id}")
+    # Start all sensor units in separate threads
+    sensor_threads = []
+    for sensor_id in sim_response.sensor_units.keys():
+        sensor_thread = threading.Thread(
+            target=control_sensor_unit,
+            args=(simulation_id, sensor_id),
+            daemon=True
+        )
+        sensor_threads.append(sensor_thread)
+        sensor_thread.start()
+        logger.info(f"Started sensor unit {sensor_id}")
     
     # Wait for some time to let the sensors start moving and detecting
     # logger.info("Sensors activated. Waiting 5 seconds before launching strike unit...")
