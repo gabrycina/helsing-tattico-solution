@@ -260,7 +260,7 @@ class StrikeUnit:
                 x, y = response.pos.x, response.pos.y
                 self.position = (x, y)
                 self.navigator.update_position(self.position)
-                self.radar.draw_unit(unit_id=self.unit_id, x=x, y=y, color=(0, 0, 0))
+                self.radar.draw_unit(unit_id=self.unit_id, x=x, y=y, color=(247, 5, 191))
                 
                 # Process messages first to see if we need to change state
                 arch_x, arch_y = utils.get_arch_x_arch_y_from_message(response)

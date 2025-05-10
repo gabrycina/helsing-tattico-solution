@@ -35,7 +35,7 @@ class Radar:
         radius = min(self.width, self.height) // 2 - 10
 
         # Draw a light green grid with concentric circles
-        for r in range(20, radius, 20):  # Increment radius by 20 for each circle
+        for r in range(20, radius, 60):  # Increment radius by 20 for each circle
             pygame.draw.circle(self.screen, (144, 238, 144), center, r, 1)  # Light green circles
 
         # Draw x-axis
@@ -62,7 +62,7 @@ class Radar:
                 label = font.render(str(y), True, (0, 255, 0))
                 self.screen.blit(label, (center[0] + 5, y_pos - 10))
 
-    def draw_unit(self, unit_id, x, y, color=(0, 0, 255)):
+    def draw_unit(self, unit_id, x, y, color=(0, 255, 0)):
         """Draw or update a unit on the radar."""
         # Update the unit's position in the dictionary
         self.units[unit_id] = (x, y, color)
