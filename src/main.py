@@ -1,91 +1,67 @@
-import grpc
-import simulation_pb2
-import simulation_pb2_grpc
-from google.protobuf.empty_pb2 import Empty
-from google.protobuf.wrappers_pb2 import StringValue
+#!/usr/bin/env python3
+"""
+Helsing Tactical Challenge - Main Entry Point
+
+This is the main entry point for running the tactical simulation.
+"""
+
 import os
+import sys
+import logging
+import argparse
 from dotenv import load_dotenv
-import time
 
-load_dotenv()
+from simulator import Simulator
 
-# Server address and port
-SERVER_ADDRESS = "172.237.124.96:21234"
-TOKEN = os.environ["token"]
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
 
+logger = logging.getLogger("main")
 
-def start_simulation() -> simulation_pb2.SimulationParameters:
-    with grpc.insecure_channel(SERVER_ADDRESS) as channel:
-        stub = simulation_pb2_grpc.SimulationStub(channel)
+def main():
+    """Main entry point for the simulation"""
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="Run the Helsing Tactical Simulation :)")
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+    parser.add_argument("--delay", type=float, default=0.0, 
+                       help="Delay before launching strike unit (seconds)")
+    args = parser.parse_args()
+    
+    # Set log level based on debug flag
+    if args.debug:
+        logging.getLogger().setLevel(logging.DEBUG)
+        logger.debug("Debug logging enabled")
+    
+    # Load environment variables
+    load_dotenv()
+    
+    # Get server address and token
+    server_address = os.getenv("SERVER_ADDRESS", "172.237.124.96:21234")
+    
+    # Use auth token from environment or generate a new one
+    token = os.getenv("AUTH_TOKEN")
+    if not token:
+        token = os.urandom(40).hex()
+        logger.info("Generated new auth token")
+    
+    logger.info(f"Using server: {server_address}")
+    
+    # Create and run simulator
+    simulator = Simulator(server_address, token)
+    simulator.run(strike_delay=args.delay)
 
-        simulation_parameters = stub.Start(
-            Empty(), metadata=[("authorization", f"bearer {TOKEN}")]
-        )
-        print("Simulation started with parameters:")
-        return simulation_parameters
-
-
-def get_simulation_status(simulation_id: str) -> None:
-    with grpc.insecure_channel(SERVER_ADDRESS) as channel:
-        stub = simulation_pb2_grpc.SimulationStub(channel)
-
-        request = StringValue(value=simulation_id)
-        response = stub.GetSimulationStatus(
-            request, metadata=[("authorization", f"bearer {TOKEN}")]
-        )
-        print("Simulation status:")
-        print(response.status)
-
-def check_detection(detections):
-    result = []
-    for direction in ["north", "northeast", "east", "southeast", "south", "southwest", "west", "northwest"]:
-        if detections.HasField(direction):
-            detection: simulation_pb2.Detection = getattr(detections, direction)
-            detection_class = "OBSTACLE" if getattr(detection, "class") == 0 else "TARGET"
-            detection_distance = detection.distance
-            result.append((direction, detection_class, detection_distance))
-    return result
-
-
-def unit_control(
-    simulation_id: str,
-    unit_id: int,
-    impulse_vector: tuple[int, int],
-) -> None:
-    with grpc.insecure_channel(SERVER_ADDRESS) as channel:
-        stub = simulation_pb2_grpc.SimulationStub(channel)
-
-        # Metadata for authentication and unit identification
-        metadata = [
-            ("authorization", f"bearer {TOKEN}"),
-            ("x-simulation-id", simulation_id),
-            ("x-unit-id", str(unit_id)),
-        ]
-
-        # Generator function to send commands
-        request = iter(
-            [
-                simulation_pb2.UnitCommand(
-                    thrust=simulation_pb2.UnitCommand.ThrustCommand(
-                        impulse=simulation_pb2.Vector2(
-                            x=impulse_vector[0], y=impulse_vector[1]
-                        )
-                    )
-                )
-            ]
-        )
-
-        # Bidirectional streaming RPC
-        responses = stub.UnitControl(request, metadata=metadata)
-
-        # Process responses from the server
-        for response in responses:
-            print(response.pos.x, response.pos.y)
-            print(check_detection(response.detections))
-            time.sleep(3)
 
 if __name__ == "__main__":
-    simulation_parameters = start_simulation()
-    print(repr(simulation_parameters))
-    get_simulation_status(simulation_parameters.id)
-    unit_control(simulation_parameters.id, 1, (1000, 0))
+    try:
+        main()
+    except KeyboardInterrupt:
+        logger.info("Simulation interrupted by user")
+    except Exception as e:
+        logger.error(f"Simulation failed with error: {e}")
+        sys.exit(1)
