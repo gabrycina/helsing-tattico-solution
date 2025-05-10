@@ -14,7 +14,7 @@ SERVER_ADDRESS = "172.237.124.96:21234"
 TOKEN = os.environ["token"]
 
 
-def start_simulation():
+def start_simulation() -> simulation_pb2.SimulationParameters:
     with grpc.insecure_channel(SERVER_ADDRESS) as channel:
         stub = simulation_pb2_grpc.SimulationStub(channel)
 
@@ -25,7 +25,7 @@ def start_simulation():
         return simulation_parameters
 
 
-def get_simulation_status(simulation_id):
+def get_simulation_status(simulation_id: str) -> None:
     with grpc.insecure_channel(SERVER_ADDRESS) as channel:
         stub = simulation_pb2_grpc.SimulationStub(channel)
 
@@ -40,7 +40,11 @@ def get_simulation_status(simulation_id):
         print(response.status)
 
 
-def unit_control(simulation_id, unit_id, impulse_vector):
+def unit_control(
+    simulation_id: str,
+    unit_id: int,
+    impulse_vector: tuple[int, int],
+) -> None:
     with grpc.insecure_channel(SERVER_ADDRESS) as channel:
         stub = simulation_pb2_grpc.SimulationStub(channel)
 
