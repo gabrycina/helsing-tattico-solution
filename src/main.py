@@ -72,7 +72,7 @@ def unit_control(simulation_id, unit_id, impulse_vector):
             print("Unit status:")
             print(f"Position: ({response.pos.x}, {response.pos.y})")
             if response.detections:
-                print("Detections:", response.detections)
+                print("Detections:", repr(response.detections))
             if response.messages:
                 print("Messages:", response.messages)
 
