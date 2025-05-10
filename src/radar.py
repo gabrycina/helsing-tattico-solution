@@ -16,25 +16,33 @@ class Radar:
         self.target_coords = None  # To store the target coordinates
         self.target_opacity = 0  # To store the target's opacity level
 
-    def draw_axes(self):
-        """Draw the x and y axes on the screen."""
-        # Set the background color to black
-        self.screen.fill((0, 0, 0))  # Black
+    def draw_background(self):
+        """Draw the black background."""
+        self.screen.fill((0, 0, 0))  # Black background
 
-        # Draw a military green circle for the coordinate system
+    def draw_radar_circle(self):
+        """Draw the green radar circle with a lighter green and more transparency."""
+        # Create a semi-transparent surface for the radar circle
+        radar_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
         center = (self.width // 2, self.height // 2)
         radius = min(self.width, self.height) // 2 - 10
-        pygame.draw.circle(self.screen, (85, 107, 47), center, radius)  # Military green
+        pygame.draw.circle(radar_surface, (0, 255, 0, 32), center, radius)  # Lighter green with more transparency
+        self.screen.blit(radar_surface, (0, 0))
+
+    def draw_axes(self):
+        """Draw the x and y axes on the radar."""
+        center = (self.width // 2, self.height // 2)
+        radius = min(self.width, self.height) // 2 - 10
 
         # Draw a light green grid with concentric circles
         for r in range(20, radius, 20):  # Increment radius by 20 for each circle
             pygame.draw.circle(self.screen, (144, 238, 144), center, r, 1)  # Light green circles
 
         # Draw x-axis
-        pygame.draw.line(self.screen, (0, 0, 0), (center[0] - radius, center[1]), (center[0] + radius, center[1]), 2)
+        pygame.draw.line(self.screen, (0, 255, 0), (center[0] - radius, center[1]), (center[0] + radius, center[1]), 2)
 
         # Draw y-axis
-        pygame.draw.line(self.screen, (0, 0, 0), (center[0], center[1] - radius), (center[0], center[1] + radius), 2)
+        pygame.draw.line(self.screen, (0, 255, 0), (center[0], center[1] - radius), (center[0], center[1] + radius), 2)
 
         # Draw labels for the axes
         font = pygame.font.Font(None, 24)
@@ -43,7 +51,7 @@ class Radar:
                 continue
             x_pos = center[0] + x * (radius // 100)
             if abs(x_pos - center[0]) <= radius:  # Ensure labels are within the circle
-                label = font.render(str(x), True, (0, 0, 0))
+                label = font.render(str(x), True, (0, 255, 0))
                 self.screen.blit(label, (x_pos - 10, center[1] + 5))
 
         for y in range(-100, 101, 20):
@@ -51,7 +59,7 @@ class Radar:
                 continue
             y_pos = center[1] - y * (radius // 100)
             if abs(y_pos - center[1]) <= radius:  # Ensure labels are within the circle
-                label = font.render(str(y), True, (0, 0, 0))
+                label = font.render(str(y), True, (0, 255, 0))
                 self.screen.blit(label, (center[0] + 5, y_pos - 10))
 
     def draw_unit(self, unit_id, x, y, color=(0, 0, 255)):
@@ -95,6 +103,8 @@ class Radar:
                 if event.type == pygame.QUIT:
                     running = False
 
+            self.draw_background()
+            self.draw_radar_circle()
             self.draw_axes()
 
             # Draw all units

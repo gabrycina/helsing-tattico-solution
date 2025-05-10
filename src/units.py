@@ -251,7 +251,7 @@ class StrikeUnit:
                 
                 # Update position and navigator
                 x, y = response.pos.x, response.pos.y
-                self.radar.draw_unit(unit_id=self.unit_id, x=x, y=y, color=(0, 0, 0))
+                self.radar.draw_unit(unit_id=self.unit_id, x=x, y=y, color=(242, 209, 41))
                 self.position = (x, y)
                 self.navigator.update_position(self.position)
                 
