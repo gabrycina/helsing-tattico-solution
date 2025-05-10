@@ -4,6 +4,7 @@ version = "0.1.0"
 description = ""
 authors = ["calebgcc <calebgucciardi@gmail.com>"]
 readme = "README.md"
+packages = [{include = "helsing_solution"}]
 
 [tool.poetry.dependencies]
 python = "^3.10"

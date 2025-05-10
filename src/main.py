@@ -22,6 +22,7 @@ def get_simulation_status(simulation_id):
         
         request = StringValue(value=simulation_id)
         response = stub.GetSimulationStatus(request, metadata=[("authorization", f"bearer {TOKEN}")])
+        response = stub.GetSimulationStatus(request, metadata=[("authorization", f"bearer {TOKEN}")])
         print("Simulation status:")
         print(response.status)
 
