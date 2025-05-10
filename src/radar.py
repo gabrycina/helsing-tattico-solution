@@ -79,7 +79,7 @@ class Radar:
             pygame.draw.circle(self.screen, color, (screen_x, screen_y), 10)
 
     def draw_target(self, x, y):
-        """Draw a target on the radar that fades away over 2 seconds without blocking the main thread."""
+        """Draw a target on the radar as a triangle that fades away over 2 seconds without blocking the main thread."""
         # Save the target coordinates and set initial opacity
         self.target_coords = (x, y)
         self.target_opacity = 255
@@ -95,6 +95,26 @@ class Radar:
 
         # Start a thread to handle the fading target
         threading.Thread(target=fade_target, daemon=True).start()
+
+        if self.target_coords is not None:
+            center = (self.width // 2, self.height // 2)
+            radius = min(self.width, self.height) // 2 - 10
+            screen_x = center[0] + int(x * (radius // 100))
+            screen_y = center[1] - int(y * (radius // 100))
+
+            # Create a surface to handle opacity
+            target_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+
+            # Define the points of the triangle
+            triangle_points = [
+                (screen_x, screen_y - 15),  # Top point
+                (screen_x - 10, screen_y + 10),  # Bottom-left point
+                (screen_x + 10, screen_y + 10)  # Bottom-right point
+            ]
+
+            # Draw the triangle
+            pygame.draw.polygon(target_surface, (255, 0, 0, self.target_opacity), triangle_points)
+            self.screen.blit(target_surface, (0, 0))
 
     def run(self):
         running = True
@@ -121,7 +141,16 @@ class Radar:
 
                 # Create a surface to handle opacity
                 target_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-                pygame.draw.circle(target_surface, (255, 0, 0, self.target_opacity), (screen_x, screen_y), 10)
+
+                # Define the points of the triangle
+                triangle_points = [
+                    (screen_x, screen_y - 15),  # Top point
+                    (screen_x - 10, screen_y + 10),  # Bottom-left point
+                    (screen_x + 10, screen_y + 10)  # Bottom-right point
+                ]
+
+                # Draw the triangle
+                pygame.draw.polygon(target_surface, (255, 0, 0, self.target_opacity), triangle_points)
                 self.screen.blit(target_surface, (0, 0))
 
             pygame.display.flip()
