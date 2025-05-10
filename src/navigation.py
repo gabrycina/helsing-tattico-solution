@@ -145,10 +145,12 @@ class UnitNavigator:
         logger.debug(f"Navigation: dist={distance:.2f}, impulse=({impulse_x:.2f}, {impulse_y:.2f})")
         return simulation_pb2.Vector2(x=impulse_x, y=impulse_y)
 
-    def is_at_target(self) -> bool:
+    def is_at_target(self, arrival_threshold=None) -> bool:
         """Check if unit has reached its target"""
         if self.target_pos is None or self.last_pos is None:
             return False
+        
+        arrival_threshold = arrival_threshold or self.arrival_threshold
         
         current_x, current_y = self.last_pos
         target_x, target_y = self.target_pos
@@ -157,7 +159,7 @@ class UnitNavigator:
         dy = target_y - current_y
         distance = math.sqrt(dx*dx + dy*dy)
         
-        return distance < self.arrival_threshold
+        return distance < arrival_threshold
 
 def navigate_to_point(navigator: UnitNavigator, 
                      current_pos: Tuple[float, float], 

@@ -1,6 +1,8 @@
 import logging
 from math import sqrt
 from google.protobuf.wrappers_pb2 import StringValue
+from google.protobuf import any_pb2
+import simulation_pb2
 
 def get_arch_centre(direction, distance, x, y):
     directions = {
@@ -48,4 +50,61 @@ def get_arch_x_arch_y_from_message(response):
                 return map(float, msg_str.split())
     
     return (None, None)
+
+def send_redundant_impulse(impulse, logger=None, unit_id=None, redundancy=3):
+    """
+    Generate multiple redundant impulse commands to handle connectivity issues.
+    
+    Args:
+        impulse: The Vector2 impulse to send
+        logger: Optional logger to log details
+        unit_id: Optional unit ID for logging
+        redundancy: Number of redundant commands to yield
+        
+    Yields:
+        Multiple redundant UnitCommand objects with the same impulse
+    """
+    if logger:
+        logger.info(f"Sending redundant impulse: {impulse.x}, {impulse.y} for unit {unit_id} ({redundancy}x)")
+    
+    # Create the command with the impulse
+    command = simulation_pb2.UnitCommand(
+        thrust=simulation_pb2.UnitCommand.ThrustCommand(
+            impulse=impulse
+        )
+    )
+    
+    # Yield the command multiple times for redundancy
+    for i in range(redundancy):
+        yield command
+
+def send_redundant_message(message_content, logger=None, unit_id=None, redundancy=3):
+    """
+    Generate multiple redundant message commands to handle connectivity issues.
+    
+    Args:
+        message_content: The message string to send
+        logger: Optional logger to log details
+        unit_id: Optional unit ID for logging
+        redundancy: Number of redundant commands to yield
+        
+    Yields:
+        Multiple redundant UnitCommand objects with the same message
+    """
+    if logger:
+        logger.info(f"Sending redundant message: '{message_content}' from unit {unit_id} ({redundancy}x)")
+    
+    # Create the StringValue and pack it into Any
+    string_value = StringValue(value=message_content)
+    any_message = any_pb2.Any()
+    any_message.Pack(string_value)
+    
+    # Create the command with the message
+    command = simulation_pb2.UnitCommand(
+        msg=simulation_pb2.UnitCommand.MsgCommand(msg=any_message)
+    )
+    
+    # Yield the command multiple times for redundancy
+    for i in range(redundancy):
+        yield command
                 
