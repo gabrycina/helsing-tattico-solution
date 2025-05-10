@@ -82,15 +82,18 @@ def control_sensor_unit(simulation_id, unit_id, initial_pos=(0,0)):
     def generate_commands():
         counter = 0
         unit_logger.info(f"Sending initial command for unit {unit_id}")
+
         yield simulation_pb2.UnitCommand(
             thrust=simulation_pb2.UnitCommand.ThrustCommand(
-                impulse=simulation_pb2.Vector2(x=0.0, y=0.0)
+                impulse=simulation_pb2.Vector2(x=0, y=0)
             )
         )
         
+
         posx = None
         posy = None
         vx, vy = 0, 0
+        counter = 200
         while True:
             unit_logger.debug(f"Unit {unit_id} waiting for response")
             response = response_queue.get()
@@ -103,18 +106,18 @@ def control_sensor_unit(simulation_id, unit_id, initial_pos=(0,0)):
                 posx = response.pos.x
                 posy = response.pos.y
             else:
-                # print("dx:", round(response.pos.x - posx, 5), "dy:", round(response.pos.y - posy,5))
+                print("dx:", round(response.pos.x - posx, 5), "dy:", round(response.pos.y - posy,5), "counter:", counter)
                 posx = response.pos.x
                 posy = response.pos.y
 
-            print("x:", round(posx,5), "y:", round(posy, 5))
-            print(results)
+            # print("x:", round(posx,5), "y:", round(posy, 5))
+            # print(results)
 
-            vx = (posx)/(-1000)
-            vy = (posy)/(-1000)
-
+            v = 10 if counter > 0 else -10
+            counter -= 1
+            
             yield simulation_pb2.UnitCommand(
-                thrust=simulation_pb2.UnitCommand.ThrustCommand(impulse=simulation_pb2.Vector2(x=vx, y=vy))
+                thrust=simulation_pb2.UnitCommand.ThrustCommand(impulse=simulation_pb2.Vector2(x=v, y=0.0))
             )
                 
     
