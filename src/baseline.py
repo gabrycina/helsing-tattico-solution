@@ -12,6 +12,7 @@ import queue
 from google.protobuf import any_pb2
 import logging
 import sys
+from navigation import UnitNavigator
 
 # Configure logging
 logging.basicConfig(
@@ -79,6 +80,9 @@ def control_sensor_unit(simulation_id, unit_id, initial_pos=(0,0)):
         "counter": 0  # Simple counter to alternate behaviors
     }
     
+    unit_navigator = UnitNavigator()
+    
+    # Create a generator for sending commands
     def generate_commands():
         counter = 0
         unit_logger.info(f"Sending initial command for unit {unit_id}")
@@ -92,31 +96,27 @@ def control_sensor_unit(simulation_id, unit_id, initial_pos=(0,0)):
         posy = None
         vx, vy = 0, 0
         while True:
-            unit_logger.debug(f"Unit {unit_id} waiting for response")
             response = response_queue.get()
-            unit_logger.debug(f"Unit {unit_id} received response")
-
-            results = check_detection(response.detections)
-            messages = response.messages
-
-            if posx == None:
-                posx = response.pos.x
-                posy = response.pos.y
-            else:
-                # print("dx:", round(response.pos.x - posx, 5), "dy:", round(response.pos.y - posy,5))
-                posx = response.pos.x
-                posy = response.pos.y
-
-            print("x:", round(posx,5), "y:", round(posy, 5))
-            print(results)
-
-            vx = (posx)/(-1000)
-            vy = (posy)/(-1000)
-
+            x = response.pos.x
+            y = response.pos.y
+            unit_navigator.set_target((0, 0))
+            unit_navigator.update_position((x, y))
+            
+            unit_logger.info(f"Current position: ({x}, {y})")
+            
+            navigation_impulse = unit_navigator.get_navigation_impulse()
+            
+            #Log navigation details
+            unit_logger.info(f"  Current velocity: {unit_navigator.estimated_velocity}")
+            # unit_logger.info(f"  Distance to target: {((x**2 + y**2)**0.5):.2f}")
+            # unit_logger.info(f"  At target: {unit_navigator.is_at_target()}")
+            unit_logger.info(f"  Nav impulse: {navigation_impulse}")
+            
             yield simulation_pb2.UnitCommand(
-                thrust=simulation_pb2.UnitCommand.ThrustCommand(impulse=simulation_pb2.Vector2(x=vx, y=vy))
-            )
-                
+                    thrust=simulation_pb2.UnitCommand.ThrustCommand(
+                        impulse=navigation_impulse 
+                    )
+                )        
     
     # Start the bidirectional streaming
     unit_logger.info(f"Starting bidirectional stream for unit {unit_id}")
