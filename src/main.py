@@ -18,10 +18,11 @@ def start_simulation():
     with grpc.insecure_channel(SERVER_ADDRESS) as channel:
         stub = simulation_pb2_grpc.SimulationStub(channel)
 
-        response = stub.Start(Empty(), metadata=[("authorization", f"bearer {TOKEN}")])
+        simulation_parameters = stub.Start(
+            Empty(), metadata=[("authorization", f"bearer {TOKEN}")]
+        )
         print("Simulation started with parameters:")
-        print(response)
-        return response
+        return simulation_parameters
 
 
 def get_simulation_status(simulation_id):
@@ -32,12 +33,54 @@ def get_simulation_status(simulation_id):
         response = stub.GetSimulationStatus(
             request, metadata=[("authorization", f"bearer {TOKEN}")]
         )
+        response = stub.GetSimulationStatus(
+            request, metadata=[("authorization", f"bearer {TOKEN}")]
+        )
         print("Simulation status:")
-        print(response)
+        print(response.status)
+
+
+def unit_control(simulation_id, unit_id, impulse_vector):
+    with grpc.insecure_channel(SERVER_ADDRESS) as channel:
+        stub = simulation_pb2_grpc.SimulationStub(channel)
+
+        # Metadata for authentication and unit identification
+        metadata = [
+            ("authorization", f"bearer {TOKEN}"),
+            ("x-simulation-id", simulation_id),
+            ("x-unit-id", str(unit_id)),
+        ]
+
+        # Generator function to send commands
+        request = iter(
+            [
+                simulation_pb2.UnitCommand(
+                    thrust=simulation_pb2.UnitCommand.ThrustCommand(
+                        impulse=simulation_pb2.Vector2(
+                            x=impulse_vector[0], y=impulse_vector[1]
+                        )
+                    )
+                )
+            ]
+        )
+
+        # Bidirectional streaming RPC
+        responses = stub.UnitControl(request, metadata=metadata)
+
+        # Process responses from the server
+        for response in responses:
+            print("Unit status:")
+            print(f"Position: ({response.pos.x}, {response.pos.y})")
+            if response.detections:
+                print("Detections:", response.detections)
+            if response.messages:
+                print("Messages:", response.messages)
 
 
 if __name__ == "__main__":
-    response = start_simulation()
-    # Extract the simulation ID from the response and use it
-    simulation_id = response.id
-    get_simulation_status(simulation_id)
+    simulation_parameters = start_simulation()
+    print("BASE:", simulation_parameters.base_pos)
+    for sensor_id, sensor_coordinates in simulation_parameters.sensor_units.items():
+        print("SENSOR:", sensor_id, sensor_coordinates)
+    get_simulation_status(simulation_parameters.id)
+    unit_control(simulation_parameters.id, 1, (0, 0))
