@@ -102,7 +102,7 @@ class SensorUnit:
                 x, y = response.pos.x, response.pos.y
                 self.position = (x, y)
                 self.radar.draw_unit(unit_id=self.unit_id, x=x, y=y)
-                self.logger.info(f"Units coords: {x=},{y=}")
+                # self.logger.info(f"Units coords: {x=},{y=}")
                 self.navigator.update_position(self.position)
                 
                 # Process messages first to see if we need to change state
@@ -112,6 +112,13 @@ class SensorUnit:
                     self.state = UnitState.ATTACK
                     self.target_position = (arch_x, arch_y)
                     self.navigator.set_target(self.target_position)
+                
+                    message = f"{arch_x} {arch_y}"
+                            
+                    # Send redundant messages t`o ensure delivery
+                    self.logger.info(f"Broadcasting target at {arch_x}, {arch_y}")
+                    for command in utils.send_redundant_message(message, self.logger, self.unit_id):
+                        yield command
                 
                 # Process detections and handle based on current state
                 if response.HasField("detections"):
@@ -126,14 +133,11 @@ class SensorUnit:
                             self.radar.draw_target(arch_x, arch_y)
                             # Broadcast target info to other units
                             message = f"{arch_x} {arch_y}"
-                            string_value = StringValue(value=message)
                             
-                            any_message = any_pb2.Any()
-                            any_message.Pack(string_value)
-                            
-                            yield simulation_pb2.UnitCommand(
-                                msg=simulation_pb2.UnitCommand.MsgCommand(msg=any_message)
-                            )
+                            # Send redundant messages to ensure delivery
+                            self.logger.info(f"Broadcasting target at {arch_x}, {arch_y}")
+                            for command in utils.send_redundant_message(message, self.logger, self.unit_id):
+                                yield command
                             
                             # Update state to ATTACK and set target
                             self.state = UnitState.ATTACK
@@ -153,18 +157,16 @@ class SensorUnit:
                     
                     # Return to patrol if we've followed the target for some time
                     # or if we've reached the target position
-                    if self.navigator.is_at_target():
+                    if self.navigator.is_at_target(arrival_threshold=10.0):
                         self.logger.info("Reached target position, returning to patrol")
                         self.state = UnitState.PATROL
                         self.navigator.set_target(self.patrol_position)
                         navigation_impulse = self.navigator.get_navigation_impulse()
                 
-                # Send movement command
-                yield simulation_pb2.UnitCommand(
-                    thrust=simulation_pb2.UnitCommand.ThrustCommand(
-                        impulse=navigation_impulse
-                    )
-                )
+                # Send movement command with redundancy
+                self.logger.debug(f"Using impulse: {navigation_impulse.x}, {navigation_impulse.y} for unit {self.unit_id}")
+                for command in utils.send_redundant_impulse(navigation_impulse, self.logger, self.unit_id):
+                    yield command
                 
             except Exception as e:
                 self.logger.error(f"Error in command generator: {e}")
@@ -221,6 +223,7 @@ class StrikeUnit:
         
         # Navigation
         self.navigator = UnitNavigator()
+        self.logger.info(f"Strike unit {unit_id} initialized and ready")
     
     def start(self):
         """Start the strike unit in a background thread"""
@@ -240,9 +243,13 @@ class StrikeUnit:
     def _command_generator(self):
         """Generate commands for the strike unit"""
         self.logger.info(f"Initializing command generator for strike unit {self.unit_id}")
-        
+       
         # Initial command with zero impulse
-        yield simulation_pb2.UnitCommand()
+        yield simulation_pb2.UnitCommand(
+            thrust=simulation_pb2.UnitCommand.ThrustCommand(
+                impulse=simulation_pb2.Vector2(x=0.0, y=0.0)
+            )
+        )
         
         while self.running:
             try:
@@ -251,30 +258,34 @@ class StrikeUnit:
                 
                 # Update position and navigator
                 x, y = response.pos.x, response.pos.y
-                self.radar.draw_unit(unit_id=self.unit_id, x=x, y=y, color=(242, 209, 41))
                 self.position = (x, y)
                 self.navigator.update_position(self.position)
+                self.radar.draw_unit(unit_id=self.unit_id, x=x, y=y, color=(0, 0, 0))
                 
-                # Process messages to look for target information
-
-                # Unpack the message value as string
+                # Process messages first to see if we need to change state
                 arch_x, arch_y = utils.get_arch_x_arch_y_from_message(response)
                 
-                if not arch_x or not arch_y:
-                    continue
-                
-                self.logger.info(f"Received target arch center coordinates: ({arch_x}, {arch_y})")
-                self.target_position = (arch_x, arch_y)
-                self.navigator.set_target(self.target_position)
-                        
-                yield simulation_pb2.UnitCommand(
-                    thrust=simulation_pb2.UnitCommand.ThrustCommand(
-                        impulse=self.navigator.get_navigation_impulse()
-                    )
-                )
+                if arch_x and arch_y:
+                    self.target_position = (arch_x, arch_y)
+                    self.navigator.set_target(self.target_position)
                     
+                    message = f"{arch_x} {arch_y}"
+
+                    # Send redundant messages t`o ensure delivery
+                    self.logger.info(f"Broadcasting target at {arch_x}, {arch_y}")
+                    for command in utils.send_redundant_message(message, self.logger, self.unit_id):
+                        yield command
+
+                navigation_impulse = self.navigator.get_navigation_impulse()
+
+                # Send movement command with redundancy
+                self.logger.debug(f"Using impulse: {navigation_impulse.x}, {navigation_impulse.y} for unit {self.unit_id}")
+                for command in utils.send_redundant_impulse(navigation_impulse, self.logger, self.unit_id):
+                    yield command
+                
             except Exception as e:
                 self.logger.error(f"Error in command generator: {e}")
+            
     
     def _control_loop(self):
         """Main control loop for the strike unit"""
