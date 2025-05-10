@@ -9,6 +9,7 @@ import logging
 import threading
 import queue
 import grpc
+import enum
 from google.protobuf.wrappers_pb2 import StringValue
 from google.protobuf import any_pb2
 
@@ -18,6 +19,12 @@ from navigation import UnitNavigator
 
 # Configure module logger
 logger = logging.getLogger("units")
+
+
+class UnitState(enum.Enum):
+    """Enum for unit states"""
+    PATROL = 1  # Unit is patrolling assigned area
+    ATTACK = 2  # Unit is following target
 
 
 class SensorUnit:
@@ -36,8 +43,12 @@ class SensorUnit:
         self.navigator = UnitNavigator()
         self.radar = radar
         
+        # State management
+        self.state = UnitState.PATROL
+        self.target_position = None
+        
         # Set patrol position based on unit ID
-        patrol_positions = [(50, 50), (-50, 50), (50, -50), (-50, -50)]
+        patrol_positions = [(50, 50), (-50, 50), (-50, -50), (50, -50)]
         idx = int(unit_id) - 1
         self.patrol_position = patrol_positions[idx]
         self.navigator.set_target(self.patrol_position)
@@ -94,7 +105,15 @@ class SensorUnit:
                 self.logger.info(f"Units coords: {x=},{y=}")
                 self.navigator.update_position(self.position)
                 
-                # Check for detections
+                # Process messages first to see if we need to change state
+                arch_x, arch_y = utils.get_arch_x_arch_y_from_message(response)
+                
+                if arch_x and arch_y:
+                    self.state = UnitState.ATTACK
+                    self.target_position = (arch_x, arch_y)
+                    self.navigator.set_target(self.target_position)
+                
+                # Process detections and handle based on current state
                 if response.HasField("detections"):
                     detections = self._process_detections(response.detections)
                     
@@ -115,31 +134,38 @@ class SensorUnit:
                             yield simulation_pb2.UnitCommand(
                                 msg=simulation_pb2.UnitCommand.MsgCommand(msg=any_message)
                             )
+                            
+                            # Update state to ATTACK and set target
+                            self.state = UnitState.ATTACK
+                            self.target_position = (arch_x, arch_y)
+                            self.navigator.set_target(self.target_position)
                 
-                arch_x, arch_y = utils.get_arch_x_arch_y_from_message(response)
-                if arch_x and arch_y:
-                    self.navigator.set_target(
-                        (self.patrol_position[0] * 0.0 + arch_x,
-                         self.patrol_position[1] * 0.0 + arch_y)
-                    )
+                # Handle state-based navigation
+                if self.state == UnitState.PATROL:
+                    # Continue patrolling
+                    navigation_impulse = self.navigator.get_navigation_impulse()
+                    self.logger.debug(f"PATROL: Moving to {self.patrol_position}")
+                
+                elif self.state == UnitState.ATTACK:
+                    # We're in attack mode following the target
+                    navigation_impulse = self.navigator.get_navigation_impulse()
+                    self.logger.debug(f"ATTACK: Following target at {self.target_position}")
+                    
+                    # Return to patrol if we've followed the target for some time
+                    # or if we've reached the target position
+                    if self.navigator.is_at_target():
+                        self.logger.info("Reached target position, returning to patrol")
+                        self.state = UnitState.PATROL
+                        self.navigator.set_target(self.patrol_position)
+                        navigation_impulse = self.navigator.get_navigation_impulse()
                 
                 # Send movement command
                 yield simulation_pb2.UnitCommand(
                     thrust=simulation_pb2.UnitCommand.ThrustCommand(
-                        impulse=self.navigator.get_navigation_impulse()
+                        impulse=navigation_impulse
                     )
                 )
                 
-                # TODO: optimisation for rare cases, switch patrol position if we've reached the current target
-                # if self.navigator.is_at_target():
-                #     # Simple rotation of patrol positions
-                #     patrol_positions = [(50, 50), (-50, 50), (-50, -50), (50, -50)]
-                #     current_idx = patrol_positions.index(self.patrol_position)
-                #     next_idx = (current_idx + 1) % len(patrol_positions)
-                #     self.patrol_position = patrol_positions[next_idx]
-                #     self.navigator.set_target(self.patrol_position)
-                #     self.logger.info(f"Reached patrol point, moving to next: {self.patrol_position}")
-
             except Exception as e:
                 self.logger.error(f"Error in command generator: {e}")
     
@@ -231,8 +257,6 @@ class StrikeUnit:
                 
                 # Process messages to look for target information
 
-                # self.logger.info(f"response {response}, {response.messages}")
-            
                 # Unpack the message value as string
                 arch_x, arch_y = utils.get_arch_x_arch_y_from_message(response)
                 
