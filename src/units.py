@@ -113,6 +113,13 @@ class SensorUnit:
                                 msg=simulation_pb2.UnitCommand.MsgCommand(msg=any_message)
                             )
                 
+                arch_x, arch_y = utils.get_arch_x_arch_y_from_message(response)
+                if arch_x and arch_y:
+                    self.navigator.set_target(
+                        (self.patrol_position[0] * 0.0 + arch_x,
+                         self.patrol_position[1] * 0.0 + arch_y)
+                    )
+                
                 # Send movement command
                 yield simulation_pb2.UnitCommand(
                     thrust=simulation_pb2.UnitCommand.ThrustCommand(
@@ -120,7 +127,7 @@ class SensorUnit:
                     )
                 )
                 
-                # # Switch patrol position if we've reached the current target
+                # TODO: optimisation for rare cases, switch patrol position if we've reached the current target
                 # if self.navigator.is_at_target():
                 #     # Simple rotation of patrol positions
                 #     patrol_positions = [(50, 50), (-50, 50), (-50, -50), (50, -50)]
@@ -200,36 +207,6 @@ class StrikeUnit:
             self.thread.join(timeout=1.0)
             self.thread = None
     
-    def _update_target_position(self):
-        """Calculate target position from direction and distance"""
-        if not self.has_target_info or not self.target_direction or not self.target_distance:
-            return
-        
-        # Get current position
-        x, y = self.position
-        
-        # Direction vectors (normalized)
-        direction_vectors = {
-            "north": (0.0, 1.0),
-            "northeast": (0.7071, 0.7071),
-            "east": (1.0, 0.0),
-            "southeast": (0.7071, -0.7071),
-            "south": (0.0, -1.0),
-            "southwest": (-0.7071, -0.7071),
-            "west": (-1.0, 0.0),
-            "northwest": (-0.7071, 0.7071)
-        }
-        
-        # Get direction vector
-        dx, dy = direction_vectors.get(self.target_direction, (0.0, 0.0))
-        
-        # Calculate target position
-        target_x = x + dx * self.target_distance
-        target_y = y + dy * self.target_distance
-        
-        self.target_position = (target_x, target_y)
-        self.logger.info(f"Calculated target position: {self.target_position}")
-    
     def _command_generator(self):
         """Generate commands for the strike unit"""
         self.logger.info(f"Initializing command generator for strike unit {self.unit_id}")
@@ -248,32 +225,25 @@ class StrikeUnit:
                 self.navigator.update_position(self.position)
                 
                 # Process messages to look for target information
+
+                # self.logger.info(f"response {response}, {response.messages}")
+            
+                # Unpack the message value as string
+                arch_x, arch_y = utils.get_arch_x_arch_y_from_message(response)
                 
-                if response.HasField("messages"):
-                    for msg in response.messages:
-                        if msg.HasField("value"):
-                            # Process the message value
-                            self.logger.debug(f"Received message from {msg.src}: {msg.value}")
-                            
-                            # Unpack the message value as string
-                            try:
-                                target_str = msg.value.value.decode('utf-8')  # Decode bytes to string
-                                arch_x, arch_y = map(float, target_str.split())  # Split "archx archy" into floats
-                                
-                                self.logger.info(f"Received target arch center coordinates: ({arch_x}, {arch_y})")
-                                self.target_position = (arch_x, arch_y)
-                                self.navigator.set_target(self.target_position)
-                                 
-                            except Exception as e:
-                                self.logger.error(f"Error unpacking message: {e}")
-               
+                if not arch_x or not arch_y:
+                    continue
                 
+                self.logger.info(f"Received target arch center coordinates: ({arch_x}, {arch_y})")
+                self.target_position = (arch_x, arch_y)
+                self.navigator.set_target(self.target_position)
+                        
                 yield simulation_pb2.UnitCommand(
                     thrust=simulation_pb2.UnitCommand.ThrustCommand(
                         impulse=self.navigator.get_navigation_impulse()
                     )
                 )
-                
+                    
             except Exception as e:
                 self.logger.error(f"Error in command generator: {e}")
     
