@@ -57,10 +57,10 @@ class Radar:
     def draw_unit(self, unit_id, x, y, color=(0, 0, 255)):
         """Draw or update a unit on the radar."""
         # Update the unit's position in the dictionary
-        self.units[unit_id] = (x, y)
+        self.units[unit_id] = (x, y, color)
 
         # Draw all units
-        for uid, (ux, uy) in self.units.items():
+        for uid, (ux, uy, color) in self.units.items():
             # Convert coordinates to screen space
             center = (self.width // 2, self.height // 2)
             radius = min(self.width, self.height) // 2 - 10
@@ -98,8 +98,8 @@ class Radar:
             self.draw_axes()
 
             # Draw all units
-            for unit_id, (x, y) in self.units.items():
-                self.draw_unit(unit_id, x, y)
+            for unit_id, values in self.units.items():
+                self.draw_unit(unit_id, values[0], values[1], values[2])
 
             # Draw the target if coordinates are available
             if self.target_coords is not None:
