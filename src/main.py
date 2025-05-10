@@ -33,9 +33,6 @@ def get_simulation_status(simulation_id: str) -> None:
         response = stub.GetSimulationStatus(
             request, metadata=[("authorization", f"bearer {TOKEN}")]
         )
-        response = stub.GetSimulationStatus(
-            request, metadata=[("authorization", f"bearer {TOKEN}")]
-        )
         print("Simulation status:")
         print(response.status)
 
