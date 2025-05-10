@@ -40,7 +40,11 @@ def get_simulation_status(simulation_id: str) -> None:
         print(response.status)
 
 
-def unit_control(simulation_id: str, unit_id: str, impulse_vector: tuple[int, int]) -> None:
+def unit_control(
+    simulation_id: str,
+    unit_id: int,
+    impulse_vector: tuple[int, int],
+) -> None:
     with grpc.insecure_channel(SERVER_ADDRESS) as channel:
         stub = simulation_pb2_grpc.SimulationStub(channel)
 
