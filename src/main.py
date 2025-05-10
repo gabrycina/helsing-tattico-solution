@@ -15,16 +15,19 @@ def start_simulation():
         response = stub.Start(Empty(), metadata=[("authorization", f"bearer {TOKEN}")])
         print("Simulation started with parameters:")
         print(response)
+        return response
 
 def get_simulation_status(simulation_id):
     with grpc.insecure_channel(SERVER_ADDRESS) as channel:
         stub = simulation_pb2_grpc.SimulationStub(channel)
         
         request = StringValue(value=simulation_id)
-        response = stub.GetSimulationStatus(request)
+        response = stub.GetSimulationStatus(request, metadata=[("authorization", f"bearer {TOKEN}")])
         print("Simulation status:")
         print(response)
 
 if __name__ == "__main__":
-    start_simulation()
-    get_simulation_status("your_simulation_id")
+    response = start_simulation()
+    # Extract the simulation ID from the response and use it
+    simulation_id = response.id
+    get_simulation_status(simulation_id)

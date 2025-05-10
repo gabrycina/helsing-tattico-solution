@@ -1,0 +1,6 @@
+protobuf>=6.30.2
+grpcio>=1.72.0rc1
+grpcio-tools>=1.72.0rc1
+
+# Dev dependencies
+mypy-protobuf>=3.6.0 
