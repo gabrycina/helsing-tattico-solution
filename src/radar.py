@@ -2,6 +2,7 @@ import pygame
 import threading
 import time
 import random
+import math
 
 class Radar:
     def __init__(self, width=800, height=800):
@@ -15,10 +16,58 @@ class Radar:
         self.units = {}  # Dictionary to store unit positions by ID
         self.target_coords = None  # To store the target coordinates
         self.target_opacity = 0  # To store the target's opacity level
+        self.scanner_angle = 0  # Angle for the rotating scanner
+        # Turquoise color scheme
+        self.radar_color = (0, 255, 238)  # Bright turquoise
+        self.grid_color = (0, 180, 170)   # Darker turquoise
+        self.scanner_color = (0, 255, 238) # Scanner color
 
     def draw_background(self):
         """Draw the black background."""
-        self.screen.fill((0, 0, 0))  # Black background
+        self.screen.fill((0, 15, 15))  # Very dark turquoise for background
+
+    def create_gradient_surface(self, radius):
+        """Create a radial gradient surface for the scanner effect."""
+        gradient = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
+        center = radius, radius
+        
+        for i in range(radius, 0, -1):
+            alpha = int((1 - (i / radius)) * 50)  # Gradient transparency
+            pygame.draw.circle(gradient, (*self.scanner_color, alpha), center, i)
+            
+        return gradient
+
+    def draw_scanner(self, center, radius):
+        """Draw the rotating scanner line with gradient."""
+        # Calculate scanner line end point
+        end_x = center[0] + radius * math.cos(math.radians(self.scanner_angle))
+        end_y = center[1] - radius * math.sin(math.radians(self.scanner_angle))
+        
+        # Create a surface for the scanner gradient
+        scanner_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        
+        # Draw the scanner line
+        pygame.draw.line(scanner_surface, (*self.scanner_color, 255), center, (end_x, end_y), 2)
+        
+        # Create a pie-shaped gradient sector
+        angle_rad = math.radians(self.scanner_angle)
+        points = [center]
+        num_points = 20
+        for i in range(num_points):
+            angle = angle_rad - math.pi / 8 + (i * math.pi / (4 * num_points))
+            x = center[0] + radius * math.cos(angle)
+            y = center[1] - radius * math.sin(angle)
+            points.append((x, y))
+        points.append(center)
+        
+        # Draw the gradient sector
+        if len(points) > 2:
+            pygame.draw.polygon(scanner_surface, (*self.scanner_color, 32), points)
+        
+        self.screen.blit(scanner_surface, (0, 0))
+        
+        # Update scanner angle
+        self.scanner_angle = (self.scanner_angle + 2) % 360  # Rotate 2 degrees per frame
 
     def draw_radar_circle(self):
         """Draw the green radar circle with a lighter green and more transparency."""
@@ -26,8 +75,15 @@ class Radar:
         radar_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
         center = (self.width // 2, self.height // 2)
         radius = min(self.width, self.height) // 2 - 10
-        pygame.draw.circle(radar_surface, (0, 255, 0, 32), center, radius)  # Lighter green with more transparency
+        
+        # Draw main radar circle
+        pygame.draw.circle(radar_surface, (*self.radar_color, 32), center, radius)  # Main circle
+        pygame.draw.circle(radar_surface, (*self.radar_color, 64), center, radius, 2)  # Outer ring
+        
         self.screen.blit(radar_surface, (0, 0))
+        
+        # Draw the scanner
+        self.draw_scanner(center, radius)
 
     def draw_axes(self):
         """Draw the x and y axes on the radar."""
@@ -35,14 +91,14 @@ class Radar:
         radius = min(self.width, self.height) // 2 - 10
 
         # Draw a light green grid with concentric circles
-        for r in range(20, radius, 60):  # Increment radius by 20 for each circle
-            pygame.draw.circle(self.screen, (144, 238, 144), center, r, 1)  # Light green circles
+        for r in range(20, radius, 60):  # Increase spacing between circles
+            pygame.draw.circle(self.screen, self.grid_color, center, r, 1)  # Light green circles
 
         # Draw x-axis
-        pygame.draw.line(self.screen, (0, 255, 0), (center[0] - radius, center[1]), (center[0] + radius, center[1]), 2)
+        pygame.draw.line(self.screen, self.radar_color, (center[0] - radius, center[1]), (center[0] + radius, center[1]), 2)
 
         # Draw y-axis
-        pygame.draw.line(self.screen, (0, 255, 0), (center[0], center[1] - radius), (center[0], center[1] + radius), 2)
+        pygame.draw.line(self.screen, self.radar_color, (center[0], center[1] - radius), (center[0], center[1] + radius), 2)
 
         # Draw labels for the axes
         font = pygame.font.Font(None, 24)
@@ -51,7 +107,7 @@ class Radar:
                 continue
             x_pos = center[0] + x * (radius // 100)
             if abs(x_pos - center[0]) <= radius:  # Ensure labels are within the circle
-                label = font.render(str(x), True, (0, 255, 0))
+                label = font.render(str(x), True, self.radar_color)
                 self.screen.blit(label, (x_pos - 10, center[1] + 5))
 
         for y in range(-100, 101, 20):
@@ -59,7 +115,7 @@ class Radar:
                 continue
             y_pos = center[1] - y * (radius // 100)
             if abs(y_pos - center[1]) <= radius:  # Ensure labels are within the circle
-                label = font.render(str(y), True, (0, 255, 0))
+                label = font.render(str(y), True, self.radar_color)
                 self.screen.blit(label, (center[0] + 5, y_pos - 10))
 
     def draw_unit(self, unit_id, x, y, color=(0, 255, 0)):
