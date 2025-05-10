@@ -12,6 +12,7 @@ import grpc
 import enum
 from google.protobuf.wrappers_pb2 import StringValue
 from google.protobuf import any_pb2
+import time
 
 import simulation_pb2
 import simulation_pb2_grpc
@@ -106,19 +107,22 @@ class SensorUnit:
                 self.navigator.update_position(self.position)
                 
                 # Process messages first to see if we need to change state
-                arch_x, arch_y = utils.get_arch_x_arch_y_from_message(response)
+                arch_x, arch_y, timestamp = utils.get_arch_x_arch_y_from_message(response)
                 
                 if arch_x and arch_y:
-                    self.state = UnitState.ATTACK
-                    self.target_position = (arch_x, arch_y)
-                    self.navigator.set_target(self.target_position)
-                
-                    message = f"{arch_x} {arch_y}"
-                            
-                    # Send redundant messages t`o ensure delivery
-                    self.logger.info(f"Broadcasting target at {arch_x}, {arch_y}")
-                    for command in utils.send_redundant_message(message, self.logger, self.unit_id):
-                        yield command
+                    delta_time = time.time() - timestamp
+                    
+                    if delta_time < 1.0:
+                        self.state = UnitState.ATTACK
+                        self.target_position = (arch_x, arch_y)
+                        self.navigator.set_target(self.target_position)
+                    
+                        message = f"{arch_x} {arch_y} {timestamp}"
+                                
+                        # Send redundant messages t`o ensure delivery
+                        self.logger.info(f"Broadcasting target at {arch_x}, {arch_y}")
+                        for command in utils.send_redundant_message(message, self.logger, self.unit_id):
+                            yield command
                 
                 # Process detections and handle based on current state
                 if response.HasField("detections"):
@@ -131,8 +135,9 @@ class SensorUnit:
                             
                             arch_x, arch_y = utils.get_arch_centre(direction, distance, x, y)
                             self.radar.draw_target(arch_x, arch_y)
+
                             # Broadcast target info to other units
-                            message = f"{arch_x} {arch_y}"
+                            message = f"{arch_x} {arch_y} {time.time()}"
                             
                             # Send redundant messages to ensure delivery
                             self.logger.info(f"Broadcasting target at {arch_x}, {arch_y}")
@@ -244,6 +249,7 @@ class StrikeUnit:
         """Generate commands for the strike unit"""
         self.logger.info(f"Initializing command generator for strike unit {self.unit_id}")
        
+        self.navigator.set_target((0, 0))
         # Initial command with zero impulse
         yield simulation_pb2.UnitCommand(
             thrust=simulation_pb2.UnitCommand.ThrustCommand(
@@ -263,18 +269,23 @@ class StrikeUnit:
                 self.radar.draw_unit(unit_id=self.unit_id, x=x, y=y, color=(247, 5, 191))
                 
                 # Process messages first to see if we need to change state
-                arch_x, arch_y = utils.get_arch_x_arch_y_from_message(response)
+                arch_x, arch_y, timestamp = utils.get_arch_x_arch_y_from_message(response)
                 
                 if arch_x and arch_y:
-                    self.target_position = (arch_x, arch_y)
-                    self.navigator.set_target(self.target_position)
-                    
-                    message = f"{arch_x} {arch_y}"
+                    delta_time = time.time() - timestamp
 
-                    # Send redundant messages t`o ensure delivery
-                    self.logger.info(f"Broadcasting target at {arch_x}, {arch_y}")
-                    for command in utils.send_redundant_message(message, self.logger, self.unit_id):
-                        yield command
+                    if delta_time < 1.0:
+                        self.target_position = (arch_x, arch_y)
+                        self.navigator.set_target(self.target_position)
+                        
+                        message = f"{arch_x} {arch_y} {timestamp}"
+
+                        # Send redundant messages t`o ensure delivery
+                        self.logger.info(f"Broadcasting target at {arch_x}, {arch_y}")
+                        for command in utils.send_redundant_message(message, self.logger, self.unit_id):
+                            yield command
+                elif self.navigator.is_at_target(arrival_threshold=10.0):
+                    self.navigator.set_target((0, 0))
 
                 navigation_impulse = self.navigator.get_navigation_impulse()
 
