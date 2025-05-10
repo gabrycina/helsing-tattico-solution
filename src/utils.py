@@ -1,6 +1,6 @@
 from math import sqrt
 
-def get_arch_centre(detection, x, y):
+def get_arch_centre(direction, distance, x, y):
     directions = {
         "north":(0,1),
         "south":(0,-1),
@@ -12,6 +12,6 @@ def get_arch_centre(detection, x, y):
         "southwest":(-sqrt(2)/2,-sqrt(2)/2)
     }
 
-    d = directions[detection[0]]
+    d = directions[direction]
     
-    return (x+d[0]*detection[2], y+d[1]*detection[2])
+    return (x+d[0]*distance, y+d[1]*distance)

@@ -4,6 +4,7 @@ Units for Helsing tactical simulation
 Contains the SensorUnit and StrikeUnit implementations.
 """
 
+import utils
 import logging
 import threading
 import queue
@@ -99,11 +100,11 @@ class SensorUnit:
                         if detection_class == "TARGET":
                             self.logger.info(f"Detected TARGET in {direction} at {distance:.2f}")
                             
-                            # Broadcast target info to other units
-                            message = f"TARGET_DETECTED|{direction}|{distance:.2f}"
-                            string_value = StringValue(value=message)
+                            arch_x, arch_y = utils.get_arch_centre(direction, distance, x, y)
                             
-                            #TODO: send right info
+                            # Broadcast target info to other units
+                            message = f"{arch_x} {arch_y}"
+                            string_value = StringValue(value=message)
                             
                             any_message = any_pb2.Any()
                             any_message.Pack(string_value)
@@ -111,15 +112,11 @@ class SensorUnit:
                             yield simulation_pb2.UnitCommand(
                                 msg=simulation_pb2.UnitCommand.MsgCommand(msg=any_message)
                             )
-                            
-                
-                # Get navigation impulse
-                navigation_impulse = self.navigator.get_navigation_impulse()
                 
                 # Send movement command
                 yield simulation_pb2.UnitCommand(
                     thrust=simulation_pb2.UnitCommand.ThrustCommand(
-                        impulse=navigation_impulse
+                        impulse=self.navigator.get_navigation_impulse()
                     )
                 )
                 
@@ -252,11 +249,28 @@ class StrikeUnit:
                 
                 # Process messages to look for target information
                 
-                #TODO: process response message and send right message
+                if response.HasField("messages"):
+                    for msg in response.messages:
+                        if msg.HasField("value"):
+                            # Process the message value
+                            self.logger.debug(f"Received message from {msg.src}: {msg.value}")
+                            
+                            # Unpack the message value as string
+                            try:
+                                target_str = msg.value.value.decode('utf-8')  # Decode bytes to string
+                                arch_x, arch_y = map(float, target_str.split())  # Split "archx archy" into floats
+                                
+                                self.logger.info(f"Received target arch center coordinates: ({arch_x}, {arch_y})")
+                                self.target_position = (arch_x, arch_y)
+                                self.navigator.set_target(self.target_position)
+                                 
+                            except Exception as e:
+                                self.logger.error(f"Error unpacking message: {e}")
+               
                 
                 yield simulation_pb2.UnitCommand(
                     thrust=simulation_pb2.UnitCommand.ThrustCommand(
-                        impulse=None
+                        impulse=self.navigator.get_navigation_impulse()
                     )
                 )
                 
