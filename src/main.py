@@ -6,7 +6,6 @@ from google.protobuf.wrappers_pb2 import StringValue
 import os
 from dotenv import load_dotenv
 
-
 load_dotenv()
 
 # Server address and port
