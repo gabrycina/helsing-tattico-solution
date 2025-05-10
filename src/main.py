@@ -9,6 +9,8 @@ import os
 import sys
 import logging
 import argparse
+import threading
+
 from dotenv import load_dotenv
 
 from simulator import Simulator
@@ -54,7 +56,10 @@ def main():
     
     # Create and run simulator
     simulator = Simulator(server_address, token)
-    simulator.run(strike_delay=args.delay)
+    simulator_thread = threading.Thread(target=simulator.run, kwargs={"strike_delay": args.delay}, daemon=True)
+    simulator_thread.start()
+    simulator.radar.run()
+    return
 
 
 if __name__ == "__main__":

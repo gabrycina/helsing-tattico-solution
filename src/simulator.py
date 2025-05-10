@@ -13,6 +13,7 @@ from google.protobuf.wrappers_pb2 import StringValue
 import simulation_pb2
 import simulation_pb2_grpc
 from units import SensorUnit, StrikeUnit
+from radar import Radar
 
 # Configure module logger
 logger = logging.getLogger("simulator")
@@ -28,7 +29,8 @@ class Simulator:
         self.base_position = None
         self.sensor_units = {}
         self.strike_unit = None
-    
+        self.radar = Radar(width=800, height=800)
+
     def start_simulation(self):
         """Start a new simulation and initialize units"""
         logger.info("Starting new simulation")
@@ -61,7 +63,8 @@ class Simulator:
                         simulation_id=self.simulation_id,
                         server_address=self.server_address,
                         auth_token=self.auth_token,
-                        start_position=start_pos
+                        start_position=start_pos,
+                        radar = self.radar
                     )
                 
                 return True
@@ -97,7 +100,8 @@ class Simulator:
                     unit_id=unit_id,
                     simulation_id=self.simulation_id,
                     server_address=self.server_address,
-                    auth_token=self.auth_token
+                    auth_token=self.auth_token,
+                    radar=self.radar
                 )
                 
                 return True

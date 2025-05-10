@@ -54,7 +54,7 @@ class Radar:
                 label = font.render(str(y), True, (0, 0, 0))
                 self.screen.blit(label, (center[0] + 5, y_pos - 10))
 
-    def draw_unit(self, unit_id, x, y):
+    def draw_unit(self, unit_id, x, y, color=(0, 0, 255)):
         """Draw or update a unit on the radar."""
         # Update the unit's position in the dictionary
         self.units[unit_id] = (x, y)
@@ -68,7 +68,7 @@ class Radar:
             screen_y = center[1] - int(uy * (radius // 100))
 
             # Draw the unit as a red circle
-            pygame.draw.circle(self.screen, (0, 0, 255), (screen_x, screen_y), 5)
+            pygame.draw.circle(self.screen, color, (screen_x, screen_y), 10)
 
     def draw_target(self, x, y):
         """Draw a target on the radar that fades away over 2 seconds without blocking the main thread."""
@@ -111,7 +111,7 @@ class Radar:
 
                 # Create a surface to handle opacity
                 target_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-                pygame.draw.circle(target_surface, (255, 0, 0, self.target_opacity), (screen_x, screen_y), 5)
+                pygame.draw.circle(target_surface, (255, 0, 0, self.target_opacity), (screen_x, screen_y), 10)
                 self.screen.blit(target_surface, (0, 0))
 
             pygame.display.flip()

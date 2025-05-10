@@ -23,7 +23,7 @@ logger = logging.getLogger("units")
 class SensorUnit:
     """A sensor unit that detects targets and broadcasts information"""
     
-    def __init__(self, unit_id, simulation_id, server_address, auth_token, start_position=None):
+    def __init__(self, unit_id, simulation_id, server_address, auth_token, start_position=None, radar=None):
         self.unit_id = unit_id
         self.simulation_id = simulation_id
         self.server_address = server_address
@@ -34,6 +34,7 @@ class SensorUnit:
         self.running = False
         self.thread = None
         self.navigator = UnitNavigator()
+        self.radar = radar
         
         # Set patrol position based on unit ID
         patrol_positions = [(50, 50), (-50, 50), (50, -50), (-50, -50)]
@@ -89,6 +90,8 @@ class SensorUnit:
                 # Update position and navigator
                 x, y = response.pos.x, response.pos.y
                 self.position = (x, y)
+                self.radar.draw_unit(unit_id=self.unit_id, x=x, y=y)
+                self.logger.info(f"Units coords: {x=},{y=}")
                 self.navigator.update_position(self.position)
                 
                 # Check for detections
@@ -101,7 +104,7 @@ class SensorUnit:
                             self.logger.info(f"Detected TARGET in {direction} at {distance:.2f}")
                             
                             arch_x, arch_y = utils.get_arch_centre(direction, distance, x, y)
-                            
+                            self.radar.draw_target(arch_x, arch_y)
                             # Broadcast target info to other units
                             message = f"{arch_x} {arch_y}"
                             string_value = StringValue(value=message)
@@ -175,7 +178,7 @@ class SensorUnit:
 class StrikeUnit:
     """A strike unit that moves to attack targets"""
     
-    def __init__(self, unit_id, simulation_id, server_address, auth_token):
+    def __init__(self, unit_id, simulation_id, server_address, auth_token, radar):
         self.unit_id = unit_id
         self.simulation_id = simulation_id
         self.server_address = server_address
@@ -185,6 +188,7 @@ class StrikeUnit:
         self.response_queue = queue.Queue()
         self.running = False
         self.thread = None
+        self.radar = radar
         
         # Target tracking
         self.target_position = None
@@ -221,6 +225,7 @@ class StrikeUnit:
                 
                 # Update position and navigator
                 x, y = response.pos.x, response.pos.y
+                self.radar.draw_unit(unit_id=self.unit_id, x=x, y=y, color=(0, 0, 0))
                 self.position = (x, y)
                 self.navigator.update_position(self.position)
                 
