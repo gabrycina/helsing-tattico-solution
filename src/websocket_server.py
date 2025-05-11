@@ -47,7 +47,7 @@ class RadarWebSocketServer:
         self.clients.remove(websocket)
         logger.info(f"Client disconnected. Total clients: {len(self.clients)}")
 
-    async def handle_connection(self, websocket: websockets.WebSocketServerProtocol, path: str):
+    async def handle_connection(self, websocket: websockets.WebSocketServerProtocol):
         """Handle a client connection"""
         await self.register(websocket)
         try:
@@ -188,6 +188,14 @@ class RadarWebSocketServer:
                             
                             # Update at least every heartbeat_interval to keep connection alive
                             if time_since_last_update >= min_update_interval:
+                                # Create and run a new event loop for this thread if one doesn't exist
+                                try:
+                                    loop = asyncio.get_event_loop()
+                                except RuntimeError:
+                                    loop = asyncio.new_event_loop()
+                                    asyncio.set_event_loop(loop)
+                                
+                                loop.run_until_complete(self.broadcast(self.radar_data))
                                 self.update_from_radar()
                                 last_update_time = current_time
                                 
@@ -248,36 +256,35 @@ if __name__ == "__main__":
     
     example_targets = [
         {"position": {"x": 100, "y": 100}, "confidence": 0.8},
+        {"position": {"x": -80, "y": 150}, "confidence": 0.6},
     ]
     
-    # Run the server with example data
     async def main():
+        # Start server
         await server.start()
         
-        # Example usage: update data every second
-        for i in range(10):
-            # Move a unit
-            example_units[0]["position"]["x"] += 5
-            
-            # Add a target with random confidence
-            if i == 5:
-                example_targets.append({
-                    "position": {"x": -120, "y": 80},
-                    "confidence": 0.6
-                })
-            
-            # Update the server data
-            server.update_all(
-                example_units,
-                example_targets,
-                {"x": 0, "y": 0},
-                "Mission Accomplished!" if i == 9 else None
-            )
-            
-            await asyncio.sleep(1)
+        # Update with example data
+        server.update_all(example_units, example_targets, {"x": 0, "y": 0})
         
-        # Wait for 5 more seconds before shutting down
-        await asyncio.sleep(5)
-        await server.stop()
+        # Keep server running
+        try:
+            while True:
+                # Move targets randomly
+                for target in example_targets:
+                    target["position"]["x"] += (random.random() * 4 - 2)
+                    target["position"]["y"] += (random.random() * 4 - 2)
+                    target["confidence"] = min(1.0, max(0.2, target.get("confidence", 0.5) + (random.random() * 0.1 - 0.05)))
+                
+                # Update data
+                server.update_all(example_units, example_targets, {"x": 0, "y": 0})
+                
+                # Wait before next update
+                await asyncio.sleep(0.1)
+        except KeyboardInterrupt:
+            # Stop server on keyboard interrupt
+            await server.stop()
     
+    import random
+    
+    # Run the server
     asyncio.run(main()) 
