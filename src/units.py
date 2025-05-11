@@ -10,13 +10,14 @@ import threading
 import queue
 import grpc
 import enum
-from google.protobuf.wrappers_pb2 import StringValue
-from google.protobuf import any_pb2
 import time
 
 import simulation_pb2
 import simulation_pb2_grpc
 from navigation import UnitNavigator
+
+from collections import deque
+import numpy as np
 
 # Configure module logger
 logger = logging.getLogger("units")
@@ -269,7 +270,7 @@ class SensorUnit:
 class StrikeUnit:
     """A strike unit that moves to attack targets"""
 
-    def __init__(self, unit_id, simulation_id, server_address, auth_token, radar):
+    def __init__(self, unit_id, simulation_id, server_address, auth_token, radar, k=5):
         self.unit_id = unit_id
         self.simulation_id = simulation_id
         self.server_address = server_address
@@ -287,6 +288,33 @@ class StrikeUnit:
         # Navigation
         self.navigator = UnitNavigator()
         self.logger.info(f"Strike unit {unit_id} initialized and ready")
+
+        # Queue for storing the last k positions
+        self.k = k
+        self.position_history = deque(maxlen=k)
+
+    def _predict_position(self):
+        """Predict the next position using linear regression"""
+        if len(self.position_history) < 2:
+            # Not enough points for prediction
+            return self.position_history[0][1], self.position_history[0][2]
+
+        # Extract timestamps, x, and y values
+        timestamps = np.array([p[0] for p in self.position_history])
+        x_values = np.array([p[1] for p in self.position_history])
+        y_values = np.array([p[2] for p in self.position_history])
+
+        # Perform linear regression for x and y
+        A = np.vstack([timestamps, np.ones(len(timestamps))]).T
+        m_x, c_x = np.linalg.lstsq(A, x_values, rcond=None)[0]
+        m_y, c_y = np.linalg.lstsq(A, y_values, rcond=None)[0]
+
+        # Predict the next position
+        next_time = timestamps[-1] + 1  # Predict for the next time step
+        predicted_x = m_x * next_time + c_x
+        predicted_y = m_y * next_time + c_y
+
+        return predicted_x, predicted_y
 
     def start(self):
         """Start the strike unit in a background thread"""
@@ -336,10 +364,13 @@ class StrikeUnit:
                 )
 
                 if arch_x and arch_y:
+                    self.position_history.append((timestamp, arch_x, arch_y))
+                    predict_x, predict_y = self._predict_position()
+
                     delta_time = time.time() - timestamp
 
                     if delta_time < 1.0:
-                        self.target_position = (arch_x, arch_y)
+                        self.target_position = (predict_x, predict_y)
                         self.navigator.set_target(self.target_position)
 
                         message = f"{arch_x} {arch_y} {timestamp}"

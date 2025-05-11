@@ -183,7 +183,6 @@ class Simulator:
                     # Show success message on radar if simulation succeeded
                     if status == 1:  # 1 is SUCCESS
                         self.radar.success()
-                        print("HOLAAAAA!!!")
 
                     break
 
