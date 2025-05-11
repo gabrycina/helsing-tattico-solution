@@ -164,20 +164,7 @@ class Radar:
         # Save the target coordinates and set initial opacity
         self.target_coords = (x, y)
         self.target_opacity = 255
-
-        def fade_target():
-            for step in range(20):  # 20 steps over 2 seconds
-                self.target_opacity = max(
-                    0, self.target_opacity - 255 // 20
-                )  # Decrease opacity
-
-            # Clear the target coordinates and opacity
-            self.target_coords = None
-            self.target_opacity = 0
-
-        # Start a thread to handle the fading target
-        threading.Thread(target=fade_target, daemon=True).start()
-
+        
         if self.target_coords is not None:
             center = (self.width // 2, self.height // 2)
             radius = min(self.width, self.height) // 2 - 10
