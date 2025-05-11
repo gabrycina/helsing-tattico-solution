@@ -22,6 +22,8 @@ class Radar:
         self.radar_color = (0, 255, 238)  # Bright turquoise
         self.grid_color = (0, 180, 170)  # Darker turquoise
         self.scanner_color = (0, 255, 238)  # Scanner color
+        # Control flag
+        self.running = threading.Event()
 
     def draw_background(self):
         """Draw the black background."""
@@ -198,12 +200,46 @@ class Radar:
             )
             self.screen.blit(target_surface, (0, 0))
 
+    def success(self):
+        """Display success message and stop the radar."""
+        self.running.clear()
+        # Draw everything one last time
+        self.draw_background()
+        self.draw_radar_circle()
+        self.draw_axes()
+        
+        # Create a large font for the success message
+        font = pygame.font.Font(None, 120)  # Large font size
+        text = font.render("SUCCESS", True, (255, 255, 255))  # White text
+        
+        # Get the text rectangle and center it
+        text_rect = text.get_rect()
+        text_rect.center = (self.width // 2, self.height // 2)
+        
+        # Draw a semi-transparent black background behind the text
+        bg_surface = pygame.Surface((text_rect.width + 40, text_rect.height + 40))
+        bg_surface.fill((0, 0, 0))
+        bg_surface.set_alpha(128)
+        bg_rect = bg_surface.get_rect()
+        bg_rect.center = (self.width // 2, self.height // 2)
+        self.screen.blit(bg_surface, bg_rect)
+        
+        # Draw the text
+        self.screen.blit(text, text_rect)
+        pygame.display.flip()
+        
+        # Keep the text visible for a moment
+        
+        # Stop the radar
+
     def run(self):
-        running = True
-        while running:
+        """Run the radar display loop."""
+        self.running.set()
+        while self.running.is_set():
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
-                    running = False
+                    self.running.clear()
+                    break
 
             self.draw_background()
             self.draw_radar_circle()
@@ -242,6 +278,7 @@ class Radar:
             pygame.display.flip()
             self.clock.tick(60)
 
+        time.sleep(8)
         pygame.quit()
 
 
