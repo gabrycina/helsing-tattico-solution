@@ -60,8 +60,19 @@ class SensorUnit:
         # Set patrol position based on unit ID
         patrol_positions = [(50, 50), (-50, 50), (-50, -50), (50, -50)]
         idx = int(unit_id) - 1
-        self.patrol_position = patrol_positions[idx]
+        self.initial_patrol_position = patrol_positions[idx]
+        self.subpatrol_positions = [(10, 10), (-10, 10), (-10, -10), (10, -10)]
+        self.subpatrol_idx = 0
         self.navigator.set_target(self.patrol_position)
+
+    @property
+    def patrol_position(self):
+        return (
+            self.initial_patrol_position[0]
+            + self.subpatrol_positions[self.subpatrol_idx][0],
+            self.initial_patrol_position[1]
+            + self.subpatrol_positions[self.subpatrol_idx][1],
+        )
 
     def start(self):
         """Start the sensor unit in a background thread"""
@@ -188,6 +199,13 @@ class SensorUnit:
                     # Continue patrolling
                     navigation_impulse = self.navigator.get_navigation_impulse()
                     self.logger.debug(f"PATROL: Moving to {self.patrol_position}")
+
+                    if self.navigator.is_at_target(arrival_threshold=2.5):
+                        # Move to the next subpatrol position
+                        self.subpatrol_idx = (self.subpatrol_idx + 1) % len(
+                            self.subpatrol_positions
+                        )
+                        self.navigator.set_target(self.patrol_position)
 
                 elif self.state == UnitState.ATTACK:
                     # We're in attack mode following the target
