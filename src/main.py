@@ -10,10 +10,12 @@ import sys
 import logging
 import argparse
 import threading
+import asyncio
 
 from dotenv import load_dotenv
 
 from simulator import Simulator
+from websocket_server import RadarWebSocketServer
 
 # Configure logging
 logging.basicConfig(
@@ -38,6 +40,11 @@ def main():
         default=0.0,
         help="Delay before launching strike unit (seconds)",
     )
+    parser.add_argument(
+        "--no-websocket",
+        action="store_true",
+        help="Disable WebSocket server for UI",
+    )
     args = parser.parse_args()
 
     # Set log level based on debug flag
@@ -59,13 +66,44 @@ def main():
 
     logger.info(f"Using server: {server_address}")
 
-    # Create and run simulator
+    # Create simulator
     simulator = Simulator(server_address, token)
+    
+    # Start WebSocket server if enabled
+    if not args.no_websocket:
+        # Create WebSocket server that uses the simulator's radar
+        ws_server = RadarWebSocketServer(radar=simulator.radar)
+        
+        # Run WebSocket server in a separate thread
+        async def start_ws_server():
+            await ws_server.start()
+            
+        # Create and start a thread for the WebSocket server
+        ws_loop = asyncio.new_event_loop()
+        ws_thread = threading.Thread(
+            target=lambda: asyncio.set_event_loop(ws_loop) or ws_loop.run_until_complete(start_ws_server()) or ws_loop.run_forever(),
+            daemon=True
+        )
+        ws_thread.start()
+        logger.info("WebSocket server thread started")
+    
+    # Run the simulator
     simulator_thread = threading.Thread(
         target=simulator.run, kwargs={"strike_delay": args.delay}, daemon=True
     )
     simulator_thread.start()
+    
+    # Run the radar display
     simulator.radar.run()
+    
+    # When radar display exits, clean up WebSocket server if it was started
+    if not args.no_websocket:
+        async def stop_ws_server():
+            await ws_server.stop()
+            ws_loop.stop()
+            
+        asyncio.run_coroutine_threadsafe(stop_ws_server(), ws_loop)
+    
     return
 
 

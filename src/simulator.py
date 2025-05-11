@@ -48,6 +48,9 @@ class Simulator:
                 # Store simulation parameters
                 self.simulation_id = response.id
                 self.base_position = (response.base_pos.x, response.base_pos.y)
+                
+                # Set base position in radar for WebSocket server
+                self.radar.set_base_position(response.base_pos.x, response.base_pos.y)
 
                 # Log simulation parameters
                 logger.info(f"Simulation started with ID: {self.simulation_id}")

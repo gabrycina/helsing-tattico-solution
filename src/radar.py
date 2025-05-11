@@ -24,6 +24,9 @@ class Radar:
         self.scanner_color = (0, 255, 238)  # Scanner color
         # Control flag
         self.running = threading.Event()
+        # For sharing data with WebSocket server
+        self.radar_targets = []  # List to store all targets with their positions and confidence
+        self.base_position = None  # To store the base position
 
     def draw_background(self):
         """Draw the black background."""
@@ -159,12 +162,13 @@ class Radar:
             # Draw the unit as a red circle
             pygame.draw.circle(self.screen, color, (screen_x, screen_y), 10)
 
-    def draw_target(self, x, y):
+    def draw_target(self, x, y, confidence=0.8):
         """Draw a target on the radar as a triangle that fades away over 2 seconds without blocking the main thread."""
         # Save the target coordinates and set initial opacity
         self.target_coords = (x, y)
         self.target_opacity = 255
         
+<<<<<<< HEAD
         def fade_target():
             for step in range(20):  # 20 steps over 2 seconds
                 self.target_opacity = max(
@@ -179,6 +183,26 @@ class Radar:
         # Start a thread to handle the fading target
         threading.Thread(target=fade_target, daemon=True).start()
 
+=======
+        # Store target for WebSocket server
+        # Ensure values are floats to avoid JSON serialization issues
+        x = float(x)
+        y = float(y)
+        confidence = float(confidence)
+        
+        # Add the target if it doesn't exist already
+        target_exists = False
+        for i, target in enumerate(self.radar_targets):
+            if abs(target[0] - x) < 1 and abs(target[1] - y) < 1:
+                # Update existing target
+                self.radar_targets[i] = (x, y, confidence)
+                target_exists = True
+                break
+        
+        if not target_exists:
+            self.radar_targets.append((x, y, confidence))
+        
+>>>>>>> ee5c722 (Add new UI)
         if self.target_coords is not None:
             center = (self.width // 2, self.height // 2)
             radius = min(self.width, self.height) // 2 - 10
@@ -281,6 +305,15 @@ class Radar:
 
         time.sleep(8)
         pygame.quit()
+
+    def set_base_position(self, x, y):
+        """Set the base position for the radar."""
+        self.base_position = (x, y)
+
+    def clear_targets(self):
+        """Clear all targets from the radar."""
+        self.radar_targets = []
+        self.target_coords = None
 
 
 if __name__ == "__main__":

@@ -228,7 +228,7 @@ class SensorUnit:
                     f"Using impulse: {navigation_impulse.x}, {navigation_impulse.y} for unit {self.unit_id}"
                 )
                 for command in utils.send_redundant_impulse(
-                    navigation_impulse, self.logger, self.unit_id
+                    navigation_impulse, None, self.unit_id
                 ):
                     yield command
 
@@ -391,7 +391,7 @@ class StrikeUnit:
                     f"Using impulse: {navigation_impulse.x}, {navigation_impulse.y} for unit {self.unit_id}"
                 )
                 for command in utils.send_redundant_impulse(
-                    navigation_impulse, self.logger, self.unit_id
+                    navigation_impulse, None, self.unit_id
                 ):
                     yield command
 
