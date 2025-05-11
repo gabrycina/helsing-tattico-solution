@@ -1,155 +1,80 @@
-# LDTH 2025 - Helsing Coordination Challenge
+# TATTICO: Tactical Radar Coordination System
 
-> Distributed mobile systems design for the London Defence Tech Hackathon, May
-> 2025. Designed and run by Helsing.
+A distributed multi-unit coordination system for autonomous sensor and strike operations. Built for the Helsing Coordination Challenge (LDTH 2025).
 
-## Challenge Prompt
+![TATTICO Tactical Radar Interface](screenshot.png)
 
-When dealing of swarms of drones, gliders and other autonomous units, one
-of the most important aspects of tasking is context sharing. Each unit only
-has limited local information about the world, which may not be sufficient
-for the task at hand. Sometimes a strike unit needs to rely on input from a
-reconnaissance unit to navigate effectively, as the former is generally equipped
-with better sensors.
+## Overview
 
-The goal of this challenge is to deal with just such a scenario. You're in
-charge of five units total, 4 sensors and 1 strike unit, and the goal is to
-navigate the strike unit to a moving target. The strike unit is blind: it must
-rely on information from other units to effectively navigate. This is where
-communication and coordination becomes important.
+TATTICO provides a C2 (Command and Control) interface for multiple-sensor-based tactical operations with automated target acquisition and strike execution. The system enables real-time coordination between distributed sensor assets and strike components operating in contested environments.
 
-We will provide contestants with access to an API that can be used to start and
-manage simulations of this scenario, giving contestants control over each unit
-individually.
+## Capabilities
 
-**Important**: control logic of each unit must only take into account local
-information provided by the API, and any state sharing must be done exclusively
-through the provided API. Shared memory, IPC or any other side-channels used
-directly or indirectly to guide the units will be grounds for disqualifying
-a solution.
+- **Multi-sensor data fusion**: Integrates data from 4 autonomous sensor units to triangulate hostile target positions with high accuracy
+- **Real-time tactical radar display**: Web sockets visualization of battlespace components including sensor units, strike platforms, and targets
+- **Autonomous strike management**: Blind strike unit navigation based on distributed sensor network intelligence
 
-### Getting started
+## Technical Architecture
 
-We provide [a protobuf schema] that can be used to generate a client to interact
-with our web service.
+TATTICO employs a distributed, event-driven architecture with the following components:
 
-The challenge server is running at 172 dot 237 dot 124 dot 96, port 21234.
+1. **Distributed Sensor Network**: Python-based sensor control logic with independent messaging capabilities
+2. **Strike Control System**: Specialized navigation algorithms for pathfinding based on sensor intelligence  
+3. **Tactical Radar Interface**: Next.js/React frontend with WebSocket-based real-time updates
+4. **Battlefield Simulation**: Physics-based simulation for testing coordination protocols
 
-#### Authentication
+### Technical Implementation
 
-For the challenge, we've enabled a "Bring Your Own Token" authentication model.
-This means you can select your own token and send it with requests using the
-`authorization` header, with the usual `bearer <token>` value format. Just
-ensure you reuse the same value for all requests you make.
+- **PID Controllers**: Strike unit navigation employs Proportional-Integral-Derivative control loops to maintain optimal intercept trajectories while accounting for inertia. The PID parameters are dynamically adjusted based on distance-to-target to ensure smooth approach and high strike probability.
 
-#### The simulation
+- **Context Sharing Protocol**: Sensor units implement a distributed redundant messaging system with an n×3 replication factor. Each detection is broadcast with confidence metrics and timestamps to enable distributed consensus on target positions despite incomplete local information.
 
-The simulation runs in a 2D environment, bounded by a square of 100 by 100
-units. All entities are spawned within this region, and the target will never
-leave it, but your units might if they drift off. There are some simplified
-physics features, so take inertia into account when planning your navigation.
-Units can accelerate in any direction.
+- **WebSocket Event Loop Management**
 
-We have implemented the following entities:
+- **Spatial Partitioning**: The battlefield space employs quad-tree partitioning to optimize collision detection and target identification.
 
-##### The home base
+### Data Flow
 
-This does nothing, but simply acts as an anchor point around which all units
-are spawned. The target will generally avoid this location, but may get close.
+```
++---------------+    +----------------+    +---------------------+
+| Sensor Units  |<-->| Message Broker |<-->| Strike Control Unit |
++---------------+    +----------------+    +---------------------+
+                            |
+                            v
+                    +----------------+
+                    | WebSocket API  |
+                    +----------------+
+                            |
+                            v
+                    +----------------+
+                    | Tactical Radar |
+                    +----------------+
+```
 
-##### The sensor units
+## Operations Guide
 
-These are your eyes in the field. They can move around and detect obstacles and
-the target. They can share messages among themselves, and the strike unit. They
-are indestructible in this simulation, but cannot overcome obstacles.
+### System Deployment
 
-##### The obstacles
+1. Start the battlefield simulation:
+   ```
+   python src/main.py
+   ```
 
-These are static objects that merely exist to make navigation more complicated.
-They can be detected by sensors and easily circumvented. No mobile entities
-(including the target) are able to pass through them.
+2. Launch the tactical radar interface:
+   ```
+   cd ui/radar-ui && npm run dev
+   ```
 
-##### The target
+3. Connect to the radar at `http://localhost:3000`
 
-This is a mobile entity that will move around constantly. Your goal is to collide
-with it using the strike unit.
+### Operational Controls
 
-##### The strike unit
+The tactical radar interface provides real-time visualization of:
+- Sensor units (blue indicators)
+- Strike platforms (magenta indicators)
+- Base position (green indicator)
+- Target acquisition data (red triangular indicators)
 
-This is your weapon at hand. Once launched, you must direct it to the target
-to complete the simulation. It possesses no sensors of its own, so you must use
-information from friendly sensor units to navigate. This can be done via the
-message passing interface.
+---
 
-If you fail to strike the target within a time limit, the simulation
-automatically times out. There is no penalty for failure - you can just start a
-fresh simulation.
-
-#### API usage guide
-
-##### Starting a simulation
-
-Starting a simulation can be done with the `Start` endpoint. It returns a
-set of initial parameters for the simulation, including the initial position
-of your sensor units, and the base position. The strike unit will launch
-from close to the base once you trigger that action.
-
-##### Controlling units
-
-To take control of individual units (including the strike unit, once launched),
-use the `UnitControl` endpoint. It expects a stream of commands as input, and
-returns a stream of statuses, which are sent each time the simulation updates.
-
-To specify which simulation and unit you wish to take control of, use two special
-request headers:
-
-`x-simulation-id`: the simulation-id returned by the call to `Start`.
-`x-unit-id`: the unit-id of the unit you wish to control. This is also returned
-from the `Start` call.
-
-Sensor updates include their current position, a set of detections and messages
-received since the last update.
-
-Detections are always associated with a cardinal direction, a class and
-a distance. The class stands for Obstacle or Target. The distance is only
-approximate. Note that cardinal directions are only accurate down to 45 degrees,
-and the error gets larger the more distant the detection. You may use multiple
-sensors to pinpoint a detection more accurately, by passing messages between
-them (assuming they are in range for detection). Since the strike unit is blind,
-these detections are essential for striking the target accurately. They can also
-be used to help with navigation.
-
-Messages can be any arbitrary payload. You can share any information between units
-you wish, as long as this information sharing takes place over the API. No bird's
-eye view solutions allowed! Each unit should be controlled independently, using only
-local information and message passing.
-
-As for commands, units can move around by applying an impulse command (which takes
-a 2D vector representing an acceleration delta), and can send message commands to
-communicate. Messages sent will be received at the next simulation tick by other
-units. If you leave the `dst` field empty, this implies a broadcast message.
-
-##### Launching the strike unit
-
-Once you're ready to strike, launch the strike unit by calling the
-`LaunchStrikeUnit` endpoint. This takes a simulation-id as argument, and
-produces a payload with the unit-id and its position. You can then control it
-as normal using the `UnitControl` endpoint - the only difference is its status
-updates will never contain any detections.
-
-##### Ending a simulation
-
-Once you manage to hit the target by colliding the strike unit with it, the
-simulation will end automatically, terminating all active streams. You can
-confirm a successful outcome by calling the `GetSimulationStatus` endpoint
-afterwards.
-
-If you fail to hit the target within a certain timeframe, it will automatically
-time out. This can be verified using the same endpoint.
-
-#### One last note
-
-Don't forget to have fun! We'd love to see what sort of creative ideas you come up.
-
-
-[a protobuf schema]: ./simulation.proto
+*Developed for the London Defence Tech Hackathon (May 2025)*
