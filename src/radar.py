@@ -142,7 +142,6 @@ class Radar:
 
         def fade_target():
             for step in range(20):  # 20 steps over 2 seconds
-                time.sleep(0.1)  # Wait 0.1 seconds per step
                 self.target_opacity = max(0, self.target_opacity - 255 // 20)  # Decrease opacity
 
             # Clear the target coordinates and opacity
