@@ -422,13 +422,14 @@ class StrikeUnit(BaseUnit):
 class SimulationController:
     """Main controller for the simulation"""
     
-    def __init__(self, config: SimulationConfig):
+    def __init__(self, config: SimulationConfig, radar=None):
         self.config = config
         self.simulation_id = None
         self.base_position = None
         self.sensor_units = {}
         self.strike_unit = None
         self.logger = logging.getLogger("simulation")
+        self.radar = radar  # Store radar reference
     
     def start_simulation(self) -> bool:
         """Start a new simulation"""
@@ -572,6 +573,11 @@ class SimulationController:
                     status_map = {1: "SUCCESS", 2: "TIMED_OUT", 3: "CANCELED"}
                     status_str = status_map.get(status, str(status))
                     self.logger.info(f"Simulation ended with status: {status_str}")
+                    
+                    # Show success message on radar if simulation succeeded
+                    if status == 1 and self.radar:  # 1 is SUCCESS
+                        self.radar.success()
+                    
                     break
                     
         except KeyboardInterrupt:
@@ -582,4 +588,4 @@ class SimulationController:
                 sensor_unit.stop()
             
             if self.strike_unit:
-                self.strike_unit.stop() 
+                self.strike_unit.stop()

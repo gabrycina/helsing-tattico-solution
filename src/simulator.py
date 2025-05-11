@@ -179,6 +179,12 @@ class Simulator:
                     status_map = {1: "SUCCESS", 2: "TIMED_OUT", 3: "CANCELED"}
                     status_str = status_map.get(status, str(status))
                     logger.info(f"Simulation ended with status: {status_str}")
+
+                    # Show success message on radar if simulation succeeded
+                    if status == 1:  # 1 is SUCCESS
+                        self.radar.success()
+                        print("HOLAAAAA!!!")
+
                     break
 
         except KeyboardInterrupt:
