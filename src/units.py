@@ -381,7 +381,7 @@ class StrikeUnit:
                             message, self.logger, self.unit_id
                         ):
                             yield command
-                elif self.navigator.is_at_target():
+                elif self.navigator.is_at_target(arrival_threshold=1.0):
                     self.navigator.set_target((0, 0))
 
                 navigation_impulse = self.navigator.get_navigation_impulse()
