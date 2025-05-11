@@ -165,8 +165,8 @@ class Simulator:
             time.sleep(strike_delay)
 
         # Launch and start strike unit
-        if self.launch_strike_unit():
-            self.strike_unit.start()
+        # if self.launch_strike_unit():
+        #     self.strike_unit.start()
 
         # Monitor simulation status
         try:

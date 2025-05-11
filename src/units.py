@@ -145,12 +145,12 @@ class SensorUnit:
                     delta_time = time.time() - timestamp
 
                     if delta_time < 1.0:
-                        self.state = UnitState.ATTACK
-                        self.target_position = (
-                            self.patrol_position[0] * 0.2 + arch_x,
-                            self.patrol_position[1] * 0.2 + arch_y,
-                        )
-                        self.navigator.set_target(self.target_position)
+                        # self.state = UnitState.ATTACK
+                        # self.target_position = (
+                        #     self.patrol_position[0] * 0.2 + arch_x,
+                        #     self.patrol_position[1] * 0.2 + arch_y,
+                        # )
+                        # self.navigator.set_target(self.target_position)
 
                         message = f"{arch_x} {arch_y} {timestamp}"
 
@@ -190,9 +190,9 @@ class SensorUnit:
                                 yield command
 
                             # Update state to ATTACK and set target
-                            self.state = UnitState.ATTACK
-                            self.target_position = (arch_x, arch_y)
-                            self.navigator.set_target(self.target_position)
+                            # self.state = UnitState.ATTACK
+                            # self.target_position = (arch_x, arch_y)
+                            # self.navigator.set_target(self.target_position)
 
                 # Handle state-based navigation
                 if self.state == UnitState.PATROL:
