@@ -45,13 +45,13 @@ def get_arch_x_arch_y_from_message(response):
                             msg_str = string_value.value
                         else:
                             logging.info(f"{msg_str} AAAAAA")
-                            return (None, None)
+                            return (None, None, None)
                          
                 return map(float, msg_str.split())
     
-    return (None, None)
+    return (None, None, None)
 
-def send_redundant_impulse(impulse, logger=None, unit_id=None, redundancy=3):
+def send_redundant_impulse(impulse, logger=None, unit_id=None, redundancy=1):
     """
     Generate multiple redundant impulse commands to handle connectivity issues.
     
