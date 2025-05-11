@@ -118,7 +118,7 @@ class Radar:
                 label = font.render(str(y), True, self.radar_color)
                 self.screen.blit(label, (center[0] + 5, y_pos - 10))
 
-    def draw_unit(self, unit_id, x, y, color=(0, 255, 0)):
+    def draw_unit(self, unit_id, x, y, color=(0, 255, 238)):
         """Draw or update a unit on the radar."""
         # Update the unit's position in the dictionary
         self.units[unit_id] = (x, y, color)
