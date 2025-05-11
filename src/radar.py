@@ -4,6 +4,7 @@ import time
 import random
 import math
 
+
 class Radar:
     def __init__(self, width=800, height=800):
         """Initialize the Radar class with a pygame window."""
@@ -19,8 +20,8 @@ class Radar:
         self.scanner_angle = 0  # Angle for the rotating scanner
         # Turquoise color scheme
         self.radar_color = (0, 255, 238)  # Bright turquoise
-        self.grid_color = (0, 180, 170)   # Darker turquoise
-        self.scanner_color = (0, 255, 238) # Scanner color
+        self.grid_color = (0, 180, 170)  # Darker turquoise
+        self.scanner_color = (0, 255, 238)  # Scanner color
 
     def draw_background(self):
         """Draw the black background."""
@@ -30,11 +31,11 @@ class Radar:
         """Create a radial gradient surface for the scanner effect."""
         gradient = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
         center = radius, radius
-        
+
         for i in range(radius, 0, -1):
             alpha = int((1 - (i / radius)) * 50)  # Gradient transparency
             pygame.draw.circle(gradient, (*self.scanner_color, alpha), center, i)
-            
+
         return gradient
 
     def draw_scanner(self, center, radius):
@@ -42,13 +43,15 @@ class Radar:
         # Calculate scanner line end point
         end_x = center[0] + radius * math.cos(math.radians(self.scanner_angle))
         end_y = center[1] - radius * math.sin(math.radians(self.scanner_angle))
-        
+
         # Create a surface for the scanner gradient
         scanner_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-        
+
         # Draw the scanner line
-        pygame.draw.line(scanner_surface, (*self.scanner_color, 255), center, (end_x, end_y), 2)
-        
+        pygame.draw.line(
+            scanner_surface, (*self.scanner_color, 255), center, (end_x, end_y), 2
+        )
+
         # Create a pie-shaped gradient sector
         angle_rad = math.radians(self.scanner_angle)
         points = [center]
@@ -59,15 +62,17 @@ class Radar:
             y = center[1] - radius * math.sin(angle)
             points.append((x, y))
         points.append(center)
-        
+
         # Draw the gradient sector
         if len(points) > 2:
             pygame.draw.polygon(scanner_surface, (*self.scanner_color, 32), points)
-        
+
         self.screen.blit(scanner_surface, (0, 0))
-        
+
         # Update scanner angle
-        self.scanner_angle = (self.scanner_angle + 2) % 360  # Rotate 2 degrees per frame
+        self.scanner_angle = (
+            self.scanner_angle + 2
+        ) % 360  # Rotate 2 degrees per frame
 
     def draw_radar_circle(self):
         """Draw the green radar circle with a lighter green and more transparency."""
@@ -75,13 +80,17 @@ class Radar:
         radar_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
         center = (self.width // 2, self.height // 2)
         radius = min(self.width, self.height) // 2 - 10
-        
+
         # Draw main radar circle
-        pygame.draw.circle(radar_surface, (*self.radar_color, 32), center, radius)  # Main circle
-        pygame.draw.circle(radar_surface, (*self.radar_color, 64), center, radius, 2)  # Outer ring
-        
+        pygame.draw.circle(
+            radar_surface, (*self.radar_color, 32), center, radius
+        )  # Main circle
+        pygame.draw.circle(
+            radar_surface, (*self.radar_color, 64), center, radius, 2
+        )  # Outer ring
+
         self.screen.blit(radar_surface, (0, 0))
-        
+
         # Draw the scanner
         self.draw_scanner(center, radius)
 
@@ -92,13 +101,27 @@ class Radar:
 
         # Draw a light green grid with concentric circles
         for r in range(20, radius, 60):  # Increase spacing between circles
-            pygame.draw.circle(self.screen, self.grid_color, center, r, 1)  # Light green circles
+            pygame.draw.circle(
+                self.screen, self.grid_color, center, r, 1
+            )  # Light green circles
 
         # Draw x-axis
-        pygame.draw.line(self.screen, self.radar_color, (center[0] - radius, center[1]), (center[0] + radius, center[1]), 2)
+        pygame.draw.line(
+            self.screen,
+            self.radar_color,
+            (center[0] - radius, center[1]),
+            (center[0] + radius, center[1]),
+            2,
+        )
 
         # Draw y-axis
-        pygame.draw.line(self.screen, self.radar_color, (center[0], center[1] - radius), (center[0], center[1] + radius), 2)
+        pygame.draw.line(
+            self.screen,
+            self.radar_color,
+            (center[0], center[1] - radius),
+            (center[0], center[1] + radius),
+            2,
+        )
 
         # Draw labels for the axes
         font = pygame.font.Font(None, 24)
@@ -142,7 +165,9 @@ class Radar:
 
         def fade_target():
             for step in range(20):  # 20 steps over 2 seconds
-                self.target_opacity = max(0, self.target_opacity - 255 // 20)  # Decrease opacity
+                self.target_opacity = max(
+                    0, self.target_opacity - 255 // 20
+                )  # Decrease opacity
 
             # Clear the target coordinates and opacity
             self.target_coords = None
@@ -164,11 +189,13 @@ class Radar:
             triangle_points = [
                 (screen_x, screen_y - 15),  # Top point
                 (screen_x - 10, screen_y + 10),  # Bottom-left point
-                (screen_x + 10, screen_y + 10)  # Bottom-right point
+                (screen_x + 10, screen_y + 10),  # Bottom-right point
             ]
 
             # Draw the triangle
-            pygame.draw.polygon(target_surface, (255, 0, 0, self.target_opacity), triangle_points)
+            pygame.draw.polygon(
+                target_surface, (255, 0, 0, self.target_opacity), triangle_points
+            )
             self.screen.blit(target_surface, (0, 0))
 
     def run(self):
@@ -195,17 +222,21 @@ class Radar:
                 screen_y = center[1] - int(y * (radius // 100))
 
                 # Create a surface to handle opacity
-                target_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+                target_surface = pygame.Surface(
+                    (self.width, self.height), pygame.SRCALPHA
+                )
 
                 # Define the points of the triangle
                 triangle_points = [
                     (screen_x, screen_y - 15),  # Top point
                     (screen_x - 10, screen_y + 10),  # Bottom-left point
-                    (screen_x + 10, screen_y + 10)  # Bottom-right point
+                    (screen_x + 10, screen_y + 10),  # Bottom-right point
                 ]
 
                 # Draw the triangle
-                pygame.draw.polygon(target_surface, (255, 0, 0, self.target_opacity), triangle_points)
+                pygame.draw.polygon(
+                    target_surface, (255, 0, 0, self.target_opacity), triangle_points
+                )
                 self.screen.blit(target_surface, (0, 0))
 
             pygame.display.flip()
@@ -221,7 +252,7 @@ if __name__ == "__main__":
         """Simulate unit updates."""
         unit_id = 1
         x = 50
-        y= 50
+        y = 50
         while True:
             # Simulate random movement
             radar.draw_unit(unit_id, x, y)
@@ -232,10 +263,10 @@ if __name__ == "__main__":
                 radar.draw_target(40, 25)
 
             time.sleep(1)
+
     # Start a thread to update units
     unit_thread = threading.Thread(target=update_units)
     unit_thread.daemon = True  # Daemonize thread
     unit_thread.start()
 
     radar.run()
-
