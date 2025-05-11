@@ -73,7 +73,7 @@ class UnitNavigator:
             # Estimate velocity (units per tick)
             vx = curr_x - prev_x
             vy = curr_y - prev_y
-            self.estimated_velocity = (vx * 250, vy * 250)
+            self.estimated_velocity = (vx * 200, vy * 200)
 
         # Update last position
         self.last_pos = current_pos
